@@ -36,9 +36,11 @@
     @endif
 
     <div class="text-center mb-4">
-        <div class="bg-light text-dark rounded py-2 mx-auto"
-             style="max-width:600px;">
-            MÀN HÌNH
+        <div class="seat-screen mx-auto">
+            <div class="seat-screen-logo" aria-label="YUNFLIMS">
+                YUNFLIMS<span>.</span>
+            </div>
+            <div class="seat-screen-label">MÀN HÌNH</div>
         </div>
     </div>
 
@@ -119,6 +121,29 @@
     .seat.disabled-seat { background: #25252b; color: #777; border: 1px dashed #666; }
     .seat.vip { outline: 2px solid #ffc107; }
     .seat.couple { min-width: 62px; border-radius: 12px; }
+    .seat-screen {
+        max-width: 600px;
+        padding: 1.1rem 1rem .7rem;
+        color: #101014;
+        background: linear-gradient(180deg, #fff 0%, #e8e8ed 100%);
+        border-radius: .75rem .75rem .25rem .25rem;
+        box-shadow: 0 12px 28px rgb(229 9 20 / 16%);
+    }
+    .seat-screen-logo {
+        color: #e50914;
+        font-size: 1.15rem;
+        font-weight: 900;
+        letter-spacing: .08em;
+    }
+    .seat-screen-logo span { color: #101014; }
+    .seat-screen-label {
+        margin-top: .35rem;
+        padding-top: .4rem;
+        border-top: 1px solid #c7c7ce;
+        font-size: .75rem;
+        font-weight: 700;
+        letter-spacing: .2em;
+    }
 </style>
 
 <script>

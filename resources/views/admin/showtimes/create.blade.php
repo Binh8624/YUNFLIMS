@@ -78,28 +78,33 @@
 
         <div class="row g-3">
             <div class="col-md-6">
-                <label class="form-label">Thời gian bắt đầu *</label>
-
+                <label for="starts_on" class="form-label">Ngày chiếu *</label>
                 <input
-                    type="datetime-local"
-                    name="starts_at"
+                    type="date"
+                    id="starts_on"
+                    name="starts_on"
                     class="form-control"
-                    value="{{ old('starts_at') }}"
+                    min="{{ now()->toDateString() }}"
+                    value="{{ old('starts_on') }}"
                     required
                 >
             </div>
 
             <div class="col-md-6">
-                <label class="form-label">Thời gian kết thúc (tự tính theo thời lượng phim)</label>
-
+                <label for="starts_time" class="form-label">Giờ bắt đầu *</label>
                 <input
-                    type="datetime-local"
-                    name="ends_at"
+                    type="time"
+                    id="starts_time"
+                    name="starts_time"
                     class="form-control"
-                    value="{{ old('ends_at') }}"
-                    readonly
+                    value="{{ old('starts_time') }}"
+                    required
                 >
             </div>
+        </div>
+        <div class="mt-2 mb-3">
+            <label for="ends_at" class="form-label">Thời gian kết thúc (tự tính theo thời lượng phim)</label>
+            <input type="datetime-local" id="ends_at" class="form-control" readonly>
         </div>
 
         <div class="mt-3 mb-3">
@@ -152,12 +157,13 @@
 <script>
     const movieDurations = @json($movies->pluck('duration', 'id'));
     const movieSelect = document.querySelector('[name="movie_id"]');
-    const startsInput = document.querySelector('[name="starts_at"]');
-    const endsInput = document.querySelector('[name="ends_at"]');
+    const startsOnInput = document.querySelector('[name="starts_on"]');
+    const startsTimeInput = document.querySelector('[name="starts_time"]');
+    const endsInput = document.querySelector('#ends_at');
 
     function updateEndTime() {
         const duration = Number(movieDurations[movieSelect.value] || 0);
-        const start = new Date(startsInput.value);
+        const start = new Date(`${startsOnInput.value}T${startsTimeInput.value}`);
         if (!duration || Number.isNaN(start.getTime())) {
             endsInput.value = '';
             return;
@@ -168,6 +174,7 @@
     }
 
     movieSelect.addEventListener('change', updateEndTime);
-    startsInput.addEventListener('change', updateEndTime);
+    startsOnInput.addEventListener('change', updateEndTime);
+    startsTimeInput.addEventListener('change', updateEndTime);
 </script>
 @endsection

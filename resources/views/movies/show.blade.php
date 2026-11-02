@@ -100,7 +100,15 @@
                                         <div class="mb-3">
                                             <strong>Giá:</strong> {{ number_format($showtime->price) }} đ
                                         </div>
-                                        <a href="{{ route('bookings.seats', $showtime) }}" class="btn btn-red w-100">Chọn ghế</a>
+                                        <a
+                                            href="{{ route('bookings.seats', $showtime) }}"
+                                            class="btn btn-outline-danger fw-bold px-4 py-2"
+                                            aria-label="Chọn suất chiếu lúc {{ $showtime->starts_at->format('H:i') }} ngày {{ $showtime->starts_at->format('d/m/Y') }} cho phim {{ $movie->title }}"
+                                        >
+                                            <i class="bi bi-clock me-1" aria-hidden="true"></i>
+                                            {{ $showtime->starts_at->format('H:i') }}
+                                            <span class="small fw-normal ms-1">Chọn suất</span>
+                                        </a>
                                     </div>
                                 </div>
                             @endforeach
@@ -160,4 +168,19 @@
         </div>
     </div>
 </div>
+
+<style>
+    #schedule .btn-outline-danger {
+        color: #ff6b73;
+        border-color: #e50914;
+    }
+
+    #schedule .btn-outline-danger:hover,
+    #schedule .btn-outline-danger:focus-visible {
+        color: #fff;
+        background: #e50914;
+        border-color: #e50914;
+    }
+</style>
+
 @endsection

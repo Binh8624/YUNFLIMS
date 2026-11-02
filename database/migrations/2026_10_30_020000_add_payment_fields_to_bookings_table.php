@@ -17,12 +17,16 @@ return new class extends Migration
             $table->text('qr_code')->nullable()->after('paid_at');
         });
 
-        DB::statement("ALTER TABLE bookings MODIFY COLUMN status ENUM('pending', 'confirmed', 'cancelled') NOT NULL DEFAULT 'pending'");
+        if (DB::getDriverName() !== 'sqlite') {
+            DB::statement("ALTER TABLE bookings MODIFY COLUMN status ENUM('pending', 'confirmed', 'cancelled') NOT NULL DEFAULT 'pending'");
+        }
     }
 
     public function down(): void
     {
-        DB::statement("ALTER TABLE bookings MODIFY COLUMN status ENUM('confirmed', 'cancelled') NOT NULL DEFAULT 'confirmed'");
+        if (DB::getDriverName() !== 'sqlite') {
+            DB::statement("ALTER TABLE bookings MODIFY COLUMN status ENUM('confirmed', 'cancelled') NOT NULL DEFAULT 'confirmed'");
+        }
 
         Schema::table('bookings', function (Blueprint $table) {
             $table->dropColumn(['payment_method', 'payment_status', 'payment_reference', 'paid_at', 'qr_code']);
