@@ -242,13 +242,33 @@
                     <a class="nav-link" href="{{ route('home') }}">Trang chủ</a>
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link" href="#movies">Phim</a>
+                    <a class="nav-link" href="{{ route('home') }}#movies">Phim</a>
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link" href="#showtimes">Lịch chiếu</a>
+                    <a class="nav-link" href="{{ route('home') }}#showtimes">Lịch chiếu</a>
                 </li>
-                <li class="nav-item">
-                    <a class="nav-link" href="#services">Dịch vụ</a>
+                <li class="nav-item dropdown">
+                    <a class="nav-link dropdown-toggle" href="#" id="servicesDropdown" role="button"
+                       data-bs-toggle="dropdown" aria-expanded="false">
+                        Dịch vụ
+                    </a>
+                    <ul class="dropdown-menu dropdown-menu-dark" aria-labelledby="servicesDropdown">
+                        <li>
+                            <a class="dropdown-item" href="{{ route('services.index') }}">
+                                <i class="bi bi-grid me-2"></i>Tất cả dịch vụ
+                            </a>
+                        </li>
+                        <li>
+                            <a class="dropdown-item" href="{{ route('services.vouchers') }}">
+                                <i class="bi bi-ticket-perforated me-2"></i>Voucher phim
+                            </a>
+                        </li>
+                        <li>
+                            <a class="dropdown-item" href="{{ route('services.gift-cards') }}">
+                                <i class="bi bi-gift me-2"></i>Thẻ quà tặng
+                            </a>
+                        </li>
+                    </ul>
                 </li>
             </ul>
 
@@ -345,8 +365,10 @@
 
             <div class="col-md-3">
                 <h6 class="text-white">Khám phá</h6>
-                <p><a href="#movies">Phim đang chiếu</a></p>
-                <p><a href="#showtimes">Lịch chiếu</a></p>
+                <p><a href="{{ route('home') }}#movies">Phim đang chiếu</a></p>
+                <p><a href="{{ route('home') }}#showtimes">Lịch chiếu</a></p>
+                <p><a href="{{ route('services.vouchers') }}">Voucher phim</a></p>
+                <p><a href="{{ route('services.gift-cards') }}">Thẻ quà tặng</a></p>
             </div>
 
             <div class="col-md-4">
