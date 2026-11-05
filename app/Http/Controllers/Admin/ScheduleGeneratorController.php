@@ -52,10 +52,13 @@ class ScheduleGeneratorController extends Controller
                 $conflict = Showtime::where('room_id', $candidate['room_id'])
                     ->where('status', 'scheduled')
                     ->where('starts_at', '<', $candidate['blocked_until'])
-                    ->whereRaw('DATE_ADD(ends_at, INTERVAL ? MINUTE) > ?', [
-                        self::CLEANUP_MINUTES,
-                        $candidate['starts_at'],
-                    ])
+                    ->where(
+                        'ends_at',
+                        '>',
+                        Carbon::parse($candidate['starts_at'])
+                            ->subMinutes(self::CLEANUP_MINUTES)
+                            ->toDateTimeString()
+                    )
                     ->lockForUpdate()
                     ->exists();
 
@@ -116,10 +119,13 @@ class ScheduleGeneratorController extends Controller
             $conflict = Showtime::where('room_id', $candidate['room_id'])
                 ->where('status', 'scheduled')
                 ->where('starts_at', '<', $candidate['blocked_until'])
-                ->whereRaw('DATE_ADD(ends_at, INTERVAL ? MINUTE) > ?', [
-                    self::CLEANUP_MINUTES,
-                    $candidate['starts_at'],
-                ])
+                ->where(
+                    'ends_at',
+                    '>',
+                    Carbon::parse($candidate['starts_at'])
+                        ->subMinutes(self::CLEANUP_MINUTES)
+                        ->toDateTimeString()
+                )
                 ->exists();
 
             if ($conflict || collect($accepted)->contains(fn ($item) => $item['room_id'] === $candidate['room_id']

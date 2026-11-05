@@ -17,7 +17,7 @@
 
         <div class="d-grid gap-2">
             <a href="{{ route('movies.show', $movie) }}" class="btn btn-outline-light btn-sm">Chi tiết</a>
-            <a href="{{ route('showtimes.index') }}" class="btn btn-red btn-sm">Đặt vé</a>
+            <a href="{{ route('movies.show', $movie) }}#schedule" class="btn btn-red btn-sm">Đặt vé</a>
         </div>
     </div>
 </div>

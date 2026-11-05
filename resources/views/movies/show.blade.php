@@ -60,13 +60,33 @@
                         <span class="text-secondary small">Chỉ hiển thị suất chiếu tương lai</span>
                     </div>
 
-                    <form method="GET" action="{{ route('movies.show', $movie) }}" class="row g-2 mb-4">
-                        <div class="col-sm-5 col-md-4">
-                            <label for="show-date" class="form-label">Ngày chiếu</label>
-                            <input id="show-date" type="date" name="date" class="form-control" value="{{ $date }}" min="{{ now()->toDateString() }}">
+                    <form method="GET" action="{{ route('movies.show', $movie) }}" class="mb-3">
+                        @if (request()->filled('cinema_id'))
+                            <input type="hidden" name="cinema_id" value="{{ request('cinema_id') }}">
+                        @endif
+                        <div class="show-date-grid" aria-label="Chọn ngày chiếu">
+                            @php($weekdays = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'])
+                            @foreach ($showDates as $showDate)
+                                @php($dateValue = $showDate->toDateString())
+                                <button
+                                    type="submit"
+                                    name="date"
+                                    value="{{ $dateValue }}"
+                                    class="show-date-option {{ $dateValue === $date ? 'active' : '' }}"
+                                    aria-pressed="{{ $dateValue === $date ? 'true' : 'false' }}"
+                                >
+                                    <span>{{ $showDate->format('d/m') }}</span>
+                                    <strong>{{ $showDate->format('d') }}</strong>
+                                    <small>{{ $weekdays[$showDate->dayOfWeek] }}</small>
+                                </button>
+                            @endforeach
                         </div>
-                        <div class="col-sm-5 col-md-5">
-                            <label for="show-cinema" class="form-label">Rạp</label>
+                    </form>
+
+                    <form method="GET" action="{{ route('movies.show', $movie) }}" class="row g-2 align-items-end mb-4">
+                        <input type="hidden" name="date" value="{{ $date }}">
+                        <div class="col-sm-8 col-md-6">
+                            <label for="show-cinema" class="form-label">Rạp chiếu</label>
                             <select id="show-cinema" name="cinema_id" class="form-select">
                                 <option value="">Tất cả rạp</option>
                                 @foreach ($cinemas as $cinema)
@@ -74,35 +94,42 @@
                                 @endforeach
                             </select>
                         </div>
-                        <div class="col-sm-2 col-md-3 d-flex align-items-end">
-                            <button class="btn btn-outline-light w-100">Xem suất</button>
+                        <div class="col-sm-4 col-md-3">
+                            <button class="btn btn-outline-light w-100">Lọc rạp</button>
                         </div>
                     </form>
 
                     @if ($movie->showtimes->isEmpty())
                         <div class="alert alert-secondary border-0 mb-0">Không có suất chiếu phù hợp trong ngày đã chọn. Chọn ngày khác để xem lịch.</div>
                     @else
-                        <div class="row g-3">
-                            @foreach ($movie->showtimes as $showtime)
-                                <div class="col-md-6 col-xl-4">
-                                    <div class="border border-secondary rounded p-3 h-100">
-                                        <div class="text-warning fw-semibold mb-2">
-                                            {{ $showtime->room->cinema->name ?? 'YUNFLIMS' }}
+                        <div class="showtime-cinema-list">
+                            @foreach ($movie->showtimes->groupBy(fn ($showtime) => $showtime->room->cinema->id ?? 0) as $cinemaShowtimes)
+                                @php($cinema = $cinemaShowtimes->first()->room->cinema)
+                                <section class="showtime-cinema">
+                                    <h5>{{ $cinema->name ?? 'YUNFLIMS' }}</h5>
+                                    <p class="showtime-city">{{ $cinema->city ?? '' }}</p>
+                                    @foreach ($cinemaShowtimes->groupBy(fn ($showtime) => $showtime->room_id . '-' . $showtime->format_id) as $roomShowtimes)
+                                        @php($firstShowtime = $roomShowtimes->first())
+                                        <div class="showtime-room">
+                                            <div class="showtime-room-heading">
+                                                <strong>{{ $firstShowtime->room->name }}</strong>
+                                                <span class="badge badge-red">{{ $firstShowtime->format?->name ?? '2D' }}</span>
+                                            </div>
+                                            <div class="showtime-time-list">
+                                                @foreach ($roomShowtimes as $showtime)
+                                                    <a
+                                                        href="{{ route('bookings.seats', $showtime) }}"
+                                                        class="showtime-time"
+                                                        aria-label="Chọn suất {{ $showtime->starts_at->format('H:i') }}, giá {{ number_format($showtime->price) }} đồng"
+                                                    >
+                                                        <strong>{{ $showtime->starts_at->format('H:i') }}</strong>
+                                                        <small>{{ number_format($showtime->price) }} đ</small>
+                                                    </a>
+                                                @endforeach
+                                            </div>
                                         </div>
-                                        <div class="mb-2">
-                                            <strong>Phòng:</strong> {{ $showtime->room->name }} ({{ $showtime->room->room_code }})
-                                        </div>
-                                        <div class="mb-2">
-                                            <strong>Thời gian:</strong>
-                                            {{ $showtime->starts_at->format('d/m/Y H:i') }}
-                                        </div>
-                                        <div class="mb-2"><strong>Định dạng:</strong> {{ $showtime->format?->name ?? '2D' }}</div>
-                                        <div class="mb-3">
-                                            <strong>Giá:</strong> {{ number_format($showtime->price) }} đ
-                                        </div>
-                                        <a href="{{ route('bookings.seats', $showtime) }}" class="btn btn-red w-100">Chọn ghế</a>
-                                    </div>
-                                </div>
+                                    @endforeach
+                                </section>
                             @endforeach
                         </div>
                     @endif
@@ -160,4 +187,133 @@
         </div>
     </div>
 </div>
+
+<style>
+    #schedule .show-date-grid {
+        display: grid;
+        grid-template-columns: repeat(7, minmax(0, 1fr));
+        gap: .5rem;
+        margin-bottom: 1.25rem;
+    }
+
+    #schedule .show-date-option {
+        display: flex;
+        min-height: 76px;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: .05rem;
+        color: #ddd;
+        background: #151519;
+        border: 1px solid #3a3a43;
+        border-radius: .55rem;
+        line-height: 1.2;
+    }
+
+    #schedule .show-date-option span,
+    #schedule .show-date-option small {
+        color: #aaa;
+        font-size: .72rem;
+    }
+
+    #schedule .show-date-option strong {
+        font-size: 1.2rem;
+    }
+
+    #schedule .show-date-option:hover,
+    #schedule .show-date-option.active {
+        color: #fff;
+        background: #e50914;
+        border-color: #e50914;
+    }
+
+    #schedule .show-date-option.active span,
+    #schedule .show-date-option.active small,
+    #schedule .show-date-option:hover span,
+    #schedule .show-date-option:hover small {
+        color: #fff;
+    }
+
+    #schedule .showtime-cinema {
+        padding: 1rem 0;
+        border-top: 1px solid #3a3a43;
+    }
+
+    #schedule .showtime-cinema h5 {
+        margin-bottom: .15rem;
+    }
+
+    #schedule .showtime-city {
+        color: #999;
+        font-size: .85rem;
+        margin-bottom: .75rem;
+    }
+
+    #schedule .showtime-room + .showtime-room {
+        margin-top: 1rem;
+    }
+
+    #schedule .showtime-room-heading {
+        display: flex;
+        align-items: center;
+        gap: .5rem;
+        margin-bottom: .6rem;
+    }
+
+    #schedule .showtime-time-list {
+        display: flex;
+        flex-wrap: wrap;
+        gap: .5rem;
+    }
+
+    #schedule .showtime-time {
+        display: inline-flex;
+        min-width: 82px;
+        flex-direction: column;
+        align-items: center;
+        padding: .45rem .7rem;
+        color: #fff;
+        text-decoration: none;
+        background: #17171c;
+        border: 1px solid #a91620;
+        border-radius: .45rem;
+        transition: background-color .15s ease, border-color .15s ease;
+    }
+
+    #schedule .showtime-time:hover,
+    #schedule .showtime-time:focus-visible {
+        color: #fff;
+        background: #e50914;
+        border-color: #e50914;
+    }
+
+    #schedule .showtime-time small {
+        color: #bbb;
+        font-size: .7rem;
+    }
+
+    #schedule .showtime-time:hover small,
+    #schedule .showtime-time:focus-visible small {
+        color: #fff;
+    }
+
+    #schedule .btn-outline-danger {
+        color: #ff6b73;
+        border-color: #e50914;
+    }
+
+    #schedule .btn-outline-danger:hover,
+    #schedule .btn-outline-danger:focus-visible {
+        color: #fff;
+        background: #e50914;
+        border-color: #e50914;
+    }
+
+    @media (max-width: 575px) {
+        #schedule .show-date-grid {
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+        }
+    }
+</style>
+
 @endsection

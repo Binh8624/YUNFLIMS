@@ -142,15 +142,28 @@ class ShowtimeController extends Controller
 
     private function validateShowtime(Request $request): array
     {
+        if ($request->filled('starts_on') && $request->filled('starts_time')) {
+            $request->merge([
+                'starts_at' => $request->input('starts_on') . ' ' . $request->input('starts_time'),
+            ]);
+        }
+
         $data = $request->validate([
             'movie_id' => 'required|integer|exists:movies,id',
             'room_id' => 'required|integer|exists:rooms,id',
+            'starts_on' => 'required|date_format:Y-m-d',
+            'starts_time' => 'required|date_format:H:i',
             'starts_at' => 'required|date|after:now',
             'ends_at' => 'nullable|date|after:starts_at',
             'price' => 'required|numeric|min:0|max:99999999.99',
             'status' => 'required|in:scheduled,cancelled',
             'format_id' => 'required|integer|exists:formats,id,is_active,1',
+        ], [
+            'starts_at.after' => 'Thời gian bắt đầu phải sau thời điểm hiện tại. Vui lòng chọn giờ chiếu sắp tới.',
+        ], [
+            'starts_at' => 'thời gian bắt đầu',
         ]);
+        unset($data['starts_on'], $data['starts_time']);
 
         $movie = Movie::findOrFail($data['movie_id']);
         $room = Room::with(['cinema', 'formats'])->findOrFail($data['room_id']);
@@ -190,7 +203,7 @@ class ShowtimeController extends Controller
         $conflict = Showtime::where('room_id', $roomId)
             ->where('status', 'scheduled')
             ->where('starts_at', '<', Carbon::parse($endsAt)->addMinutes(15))
-            ->whereRaw('DATE_ADD(ends_at, INTERVAL 15 MINUTE) > ?', [$startsAt])
+            ->where('ends_at', '>', Carbon::parse($startsAt)->subMinutes(15))
             ->when(
                 $ignoreId,
                 fn ($query) => $query->where('id', '!=', $ignoreId)

@@ -54,6 +54,16 @@ class HomeController extends Controller
         $date = $validated['date'] ?? now()->toDateString();
         $dayStart = \Illuminate\Support\Carbon::parse($date)->startOfDay();
         $dayEnd = $dayStart->copy()->addDay();
+        $showDates = collect(range(0, 13))
+            ->map(fn (int $offset) => now()->startOfDay()->addDays($offset));
+
+        if (! $showDates->contains(fn ($showDate) => $showDate->toDateString() === $date)) {
+            $showDates->push(\Illuminate\Support\Carbon::parse($date)->startOfDay());
+        }
+
+        $showDates = $showDates
+            ->sortBy(fn ($showDate) => $showDate->timestamp)
+            ->values();
 
         $movie->load([
             'formats' => fn ($query) => $query->where('formats.is_active', true),
@@ -85,6 +95,6 @@ class HomeController extends Controller
             ? $movie->reviews()->where('user_id', auth()->id())->first()
             : null;
 
-        return view('movies.show', compact('movie', 'date', 'cinemas', 'myReview'));
+        return view('movies.show', compact('movie', 'date', 'showDates', 'cinemas', 'myReview'));
     }
 }
