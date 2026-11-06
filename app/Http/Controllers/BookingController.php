@@ -4,6 +4,8 @@ namespace App\Http\Controllers;
 
 use App\Models\Booking;
 use App\Models\BookingSeat;
+use App\Models\Cinema;
+use App\Models\Format;
 use App\Models\Movie;
 use App\Models\Room;
 use App\Models\Seat;
@@ -12,30 +14,141 @@ use App\Services\ShowtimeRules;
 use App\Services\TicketPriceCalculator;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 class BookingController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
         $this->expirePendingHolds();
 
-        $showtimes = Showtime::with([
-            'movie',
+        $today = now()->startOfDay();
+        $maxDate = $today->copy()->addDays(6);
+
+        // Tạo danh sách 7 ngày tiếp theo tính từ hôm nay
+        $days = collect(range(0, 6))->map(function (int $offset) use ($today) {
+            $day = $today->copy()->addDays($offset);
+
+            return [
+                'date' => $day->toDateString(),
+                'day' => $day->format('d'),
+                'month' => $day->format('m'),
+                'date_formatted' => $day->format('d/m'),
+                'day_of_week' => match ($day->dayOfWeek) {
+                    0 => 'Chủ Nhật',
+                    1 => 'Thứ Hai',
+                    2 => 'Thứ Ba',
+                    3 => 'Thứ Tư',
+                    4 => 'Thứ Năm',
+                    5 => 'Thứ Sáu',
+                    6 => 'Thứ Bảy',
+                },
+                'day_of_week_short' => match ($day->dayOfWeek) {
+                    0 => 'CN',
+                    1 => 'T2',
+                    2 => 'T3',
+                    3 => 'T4',
+                    4 => 'T5',
+                    5 => 'T6',
+                    6 => 'T7',
+                },
+                'is_today' => $offset === 0,
+            ];
+        });
+
+        // Kiểm tra và chuẩn hóa ngày được chọn
+        $requestedDate = $request->query('date');
+        $selectedDate = $today->toDateString();
+        if ($requestedDate && is_string($requestedDate)) {
+            try {
+                $parsed = Carbon::createFromFormat('Y-m-d', $requestedDate)->startOfDay();
+                if ($parsed->greaterThanOrEqualTo($today) && $parsed->lessThanOrEqualTo($maxDate)) {
+                    $selectedDate = $parsed->toDateString();
+                }
+            } catch (\Exception $e) {
+                $selectedDate = $today->toDateString();
+            }
+        }
+
+        $cinemaId = $request->filled('cinema_id') ? (int) $request->query('cinema_id') : null;
+        $movieId = $request->filled('movie_id') ? (int) $request->query('movie_id') : null;
+
+        $dayStart = Carbon::parse($selectedDate)->startOfDay();
+        $dayEnd = $dayStart->copy()->endOfDay();
+        $isToday = $dayStart->isToday();
+
+        // Truy vấn suất chiếu hợp lệ cho ngày được chọn
+        $showtimeQuery = Showtime::with([
+            'movie.formats' => fn ($query) => $query->where('formats.is_active', true),
             'room.cinema',
+            'room.formats' => fn ($query) => $query->where('formats.is_active', true),
             'format',
         ])
             ->where('status', 'scheduled')
-            ->where('starts_at', '>', now())
+            ->where('starts_at', '>=', $isToday ? now() : $dayStart)
+            ->where('starts_at', '<=', $dayEnd)
             ->whereHas('movie', fn ($query) => $query->where('status', '!=', 'inactive'))
             ->whereHas('format', fn ($query) => $query->where('is_active', true))
             ->whereHas('room', fn ($query) => $query->where('is_active', true)
-                ->whereHas('cinema', fn ($cinema) => $cinema->where('is_active', true)))
-            ->orderBy('starts_at')
-            ->paginate(12);
+                ->whereHas('cinema', fn ($cinema) => $cinema->where('is_active', true))
+            )
+            ->whereHas('movie.formats', fn ($format) => $format->whereColumn('formats.id', 'showtimes.format_id'))
+            ->whereHas('room.formats', fn ($format) => $format->whereColumn('formats.id', 'showtimes.format_id'))
+            ->orderBy('starts_at');
 
-        return view('bookings.index', compact('showtimes'));
+        if ($cinemaId) {
+            $showtimeQuery->whereHas('room.cinema', fn ($query) => $query->where('cinemas.id', $cinemaId));
+        }
+
+        if ($movieId) {
+            $showtimeQuery->where('movie_id', $movieId);
+        }
+
+        $showtimes = $showtimeQuery->get();
+
+        // Gom nhóm suất chiếu theo Phim -> Rạp -> Phòng & Định dạng
+        $groupedByMovie = $showtimes->groupBy('movie_id')->map(function ($movieShowtimes) {
+            $movie = $movieShowtimes->first()->movie;
+            $cinemas = $movieShowtimes->groupBy(fn ($showtime) => $showtime->room->cinema_id)->map(function ($cinemaShowtimes) {
+                $cinema = $cinemaShowtimes->first()->room->cinema;
+                $rooms = $cinemaShowtimes->groupBy(fn ($showtime) => $showtime->room_id . '-' . $showtime->format_id)->map(function ($roomShowtimes) {
+                    $first = $roomShowtimes->first();
+
+                    return [
+                        'room' => $first->room,
+                        'format' => $first->format,
+                        'showtimes' => $roomShowtimes,
+                    ];
+                });
+
+                return [
+                    'cinema' => $cinema,
+                    'rooms' => $rooms,
+                ];
+            });
+
+            return [
+                'movie' => $movie,
+                'cinemas' => $cinemas,
+                'total_showtimes' => $movieShowtimes->count(),
+            ];
+        });
+
+        // Danh sách rạp và phim đang hoạt động phục vụ bộ lọc
+        $cinemas = Cinema::where('is_active', true)->orderBy('name')->get();
+        $movies = Movie::where('status', '!=', 'inactive')->orderBy('title')->get();
+
+        return view('bookings.index', compact(
+            'days',
+            'selectedDate',
+            'groupedByMovie',
+            'cinemas',
+            'movies',
+            'cinemaId',
+            'movieId'
+        ));
     }
 
     public function history()

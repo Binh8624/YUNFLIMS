@@ -27,6 +27,16 @@
         </div>
 
         <div class="col-lg-8">
+            @if ($errors->any())
+                <div class="alert alert-danger mb-4">
+                    <ul class="mb-0">
+                        @foreach ($errors->all() as $error)
+                            <li>{{ $error }}</li>
+                        @endforeach
+                    </ul>
+                </div>
+            @endif
+
             <div class="card bg-dark border-secondary mb-4">
                 <div class="card-body p-4">
                     <h3 class="mb-3">Thông tin cá nhân</h3>

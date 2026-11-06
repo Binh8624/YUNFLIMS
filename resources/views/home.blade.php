@@ -86,37 +86,6 @@
     @endif
 </section>
 
-<section class="container py-4" id="showtimes">
-    <div class="text-center mb-4">
-        <h2 class="section-title d-inline-block">ĐẶT VÉ NHANH</h2>
-        <p class="text-secondary mt-3">Chỉ với vài bước để sẵn sàng cho bộ phim yêu thích.</p>
-    </div>
-
-    <div class="row g-3">
-        <div class="col-md-4">
-            <div class="feature-box text-center">
-                <i class="bi bi-film feature-icon"></i>
-                <h5 class="mt-3">1. Chọn phim</h5>
-                <p class="text-secondary mb-0">Tìm bộ phim bạn muốn thưởng thức.</p>
-            </div>
-        </div>
-        <div class="col-md-4">
-            <div class="feature-box text-center">
-                <i class="bi bi-calendar-event feature-icon"></i>
-                <h5 class="mt-3">2. Chọn suất chiếu</h5>
-                <p class="text-secondary mb-0">Chọn ngày, rạp và giờ chiếu phù hợp.</p>
-            </div>
-        </div>
-        <div class="col-md-4">
-            <div class="feature-box text-center">
-                <i class="bi bi-ticket-perforated feature-icon"></i>
-                <h5 class="mt-3">3. Nhận vé</h5>
-                <p class="text-secondary mb-0">Chọn ghế và xác nhận đặt vé.</p>
-            </div>
-        </div>
-    </div>
-</section>
-
 <section class="container py-5" id="services">
     <div class="p-4 p-md-5 rounded-4" style="background: linear-gradient(120deg, #501016, #211116);">
         <div class="row align-items-center g-3">
