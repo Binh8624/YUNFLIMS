@@ -54,6 +54,13 @@
             <span><span class="badge bg-success">■</span> Đang chọn</span>
             <span><span class="badge bg-dark border">■</span> Khóa / hỏng</span>
         </div>
+        <div class="d-flex flex-wrap justify-content-center gap-3 mb-4">
+            @foreach (['standard' => 'Ghế thường', 'vip' => 'Ghế VIP', 'couple' => 'Ghế đôi'] as $seatType => $seatLabel)
+                @if ($seat = $seats->firstWhere('seat_type', $seatType))
+                    <span>{{ $seatLabel }}: <strong>{{ number_format($priceMap[$seat->id], 0, ',', '.') }} đ</strong></span>
+                @endif
+            @endforeach
+        </div>
 
         @foreach ($seats->groupBy('row_number') as $rowNumber => $rowSeats)
             <div class="d-flex flex-wrap justify-content-center align-items-center gap-2 mb-2">

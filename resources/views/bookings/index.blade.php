@@ -26,7 +26,7 @@
                     </p>
 
                     <strong class="text-warning">
-                        {{ number_format($showtime->price) }} đ/ghế
+                        Từ {{ number_format($showtime->price) }} đ/ghế
                     </strong>
                 </div>
 
@@ -70,7 +70,7 @@
                     </p>
 
                     <strong class="text-warning">
-                        {{ number_format($showtime->price) }} đ/ghế
+                        Từ {{ number_format($showtime->price) }} đ/ghế
                     </strong>
                 </div>
 

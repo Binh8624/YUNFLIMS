@@ -12,7 +12,9 @@
             <div class="col-md-6"><label class="form-label">Định dạng</label><select name="format_id" class="form-select" required><option value="">Chọn định dạng</option>@foreach ($formats as $format)<option value="{{ $format->id }}" @selected(old('format_id') == $format->id)>{{ $format->name }}</option>@endforeach</select></div>
             <div class="col-md-3"><label class="form-label">Ngày bắt đầu</label><input type="date" name="starts_on" min="{{ now()->toDateString() }}" value="{{ old('starts_on', now()->toDateString()) }}" class="form-control" required></div>
             <div class="col-md-3"><label class="form-label">Ngày kết thúc</label><input type="date" name="ends_on" min="{{ now()->toDateString() }}" value="{{ old('ends_on', now()->toDateString()) }}" class="form-control" required></div>
-            <div class="col-md-6"><label class="form-label">Giá cơ bản (VNĐ)</label><input type="number" name="price" value="{{ old('price', 80000) }}" min="0" step="1000" class="form-control" required></div>
+            <div class="col-md-4"><label class="form-label">Giá ghế thường (VNĐ)</label><input type="number" name="price" value="{{ old('price', 80000) }}" min="0" max="99999999.99" step="1000" class="form-control" required></div>
+            <div class="col-md-4"><label class="form-label">Giá ghế VIP (VNĐ)</label><input type="number" name="vip_price" value="{{ old('vip_price', 100000) }}" min="0" max="99999999.99" step="1000" class="form-control" required></div>
+            <div class="col-md-4"><label class="form-label">Giá ghế đôi (VNĐ)</label><input type="number" name="couple_price" value="{{ old('couple_price', 160000) }}" min="0" max="99999999.99" step="1000" class="form-control" required></div>
             <div class="col-12">
                 <fieldset>
                     <legend class="form-label">Phòng tương thích</legend>
@@ -75,7 +77,7 @@
                 @foreach (array_slice($preview['skipped'], 0, 100) as $slot)<tr><td>{{ $slot['cinema_name'] }} / {{ $slot['room_name'] }}</td><td>{{ $slot['starts_at'] }}</td><td>{{ $slot['ends_at'] }}</td><td class="text-warning">Bỏ qua - trùng lịch</td></tr>@endforeach
             </tbody></table></div>
             <form method="POST" action="{{ route('admin.showtimes.auto.store') }}">@csrf
-                @foreach (['movie_id', 'format_id', 'starts_on', 'ends_on', 'price'] as $field)<input type="hidden" name="{{ $field }}" value="{{ old($field) }}">@endforeach
+                @foreach (['movie_id', 'format_id', 'starts_on', 'ends_on', 'price', 'vip_price', 'couple_price'] as $field)<input type="hidden" name="{{ $field }}" value="{{ old($field) }}">@endforeach
                 @foreach (old('room_ids', []) as $roomId)<input type="hidden" name="room_ids[]" value="{{ $roomId }}">@endforeach
                 @foreach (old('times', []) as $time)<input type="hidden" name="times[]" value="{{ $time }}">@endforeach
                 <button class="btn btn-red" {{ $preview['count'] === 0 ? 'disabled' : '' }}>Tạo {{ $preview['count'] }} suất chiếu</button>

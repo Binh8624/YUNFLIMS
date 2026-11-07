@@ -107,19 +107,19 @@
             <input type="datetime-local" id="ends_at" class="form-control" readonly>
         </div>
 
-        <div class="mt-3 mb-3">
-            <label class="form-label">Giá vé (VNĐ) *</label>
-
-            <input
-                type="number"
-                name="price"
-                class="form-control"
-                min="0"
-                max="99999999.99"
-                step="1000"
-                value="{{ old('price', 80000) }}"
-                required
-            >
+        <div class="row g-3 mt-1 mb-3">
+            <div class="col-md-4">
+                <label for="price" class="form-label">Giá ghế thường (VNĐ) *</label>
+                <input type="number" id="price" name="price" class="form-control" min="0" max="99999999.99" step="1000" value="{{ old('price', 80000) }}" required>
+            </div>
+            <div class="col-md-4">
+                <label for="vip_price" class="form-label">Giá ghế VIP (VNĐ) *</label>
+                <input type="number" id="vip_price" name="vip_price" class="form-control" min="0" max="99999999.99" step="1000" value="{{ old('vip_price', 100000) }}" required>
+            </div>
+            <div class="col-md-4">
+                <label for="couple_price" class="form-label">Giá ghế đôi (VNĐ) *</label>
+                <input type="number" id="couple_price" name="couple_price" class="form-control" min="0" max="99999999.99" step="1000" value="{{ old('couple_price', 160000) }}" required>
+            </div>
         </div>
 
         <div class="mb-4">

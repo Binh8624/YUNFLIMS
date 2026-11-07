@@ -69,8 +69,10 @@
                             {{ $showtime->ends_at->format('d/m/Y H:i') }}
                         </td>
 
-                        <td>
-                            {{ number_format((float) $showtime->price, 0, ',', '.') }} đ
+                        <td class="text-nowrap">
+                            Thường: {{ number_format((float) $showtime->price, 0, ',', '.') }} đ<br>
+                            VIP: {{ number_format((float) ($showtime->vip_price ?? $showtime->price), 0, ',', '.') }} đ<br>
+                            Đôi: {{ number_format((float) ($showtime->couple_price ?? $showtime->price), 0, ',', '.') }} đ
                         </td>
 
                         <td>

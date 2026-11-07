@@ -120,10 +120,10 @@
                                                     <a
                                                         href="{{ route('bookings.seats', $showtime) }}"
                                                         class="showtime-time"
-                                                        aria-label="Chọn suất {{ $showtime->starts_at->format('H:i') }}, giá {{ number_format($showtime->price) }} đồng"
+                                                        aria-label="Chọn suất {{ $showtime->starts_at->format('H:i') }}, giá từ {{ number_format($showtime->price) }} đồng"
                                                     >
                                                         <strong>{{ $showtime->starts_at->format('H:i') }}</strong>
-                                                        <small>{{ number_format($showtime->price) }} đ</small>
+                                                        <small>Từ {{ number_format($showtime->price) }} đ</small>
                                                     </a>
                                                 @endforeach
                                             </div>

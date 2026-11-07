@@ -156,6 +156,8 @@ class ShowtimeController extends Controller
             'starts_at' => 'required|date|after:now',
             'ends_at' => 'nullable|date|after:starts_at',
             'price' => 'required|numeric|min:0|max:99999999.99',
+            'vip_price' => 'required|numeric|min:0|max:99999999.99',
+            'couple_price' => 'required|numeric|min:0|max:99999999.99',
             'status' => 'required|in:scheduled,cancelled',
             'format_id' => 'required|integer|exists:formats,id,is_active,1',
         ], [

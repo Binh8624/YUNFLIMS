@@ -73,6 +73,8 @@ class ScheduleGeneratorController extends Controller
                     'starts_at' => $candidate['starts_at'],
                     'ends_at' => $candidate['ends_at'],
                     'price' => $data['price'],
+                    'vip_price' => $data['vip_price'],
+                    'couple_price' => $data['couple_price'],
                     'status' => 'scheduled',
                 ]);
             }
@@ -96,6 +98,8 @@ class ScheduleGeneratorController extends Controller
             'times' => ['required', 'array', 'min:1', 'max:8'],
             'times.*' => ['required', 'date_format:H:i', 'distinct'],
             'price' => ['required', 'numeric', 'min:0', 'max:99999999.99'],
+            'vip_price' => ['required', 'numeric', 'min:0', 'max:99999999.99'],
+            'couple_price' => ['required', 'numeric', 'min:0', 'max:99999999.99'],
         ]);
 
         $days = Carbon::parse($data['starts_on'])->diffInDays(Carbon::parse($data['ends_on'])) + 1;

@@ -52,7 +52,7 @@ Website đặt vé xem phim Laravel 12 sử dụng Blade và Bootstrap. Hệ th�
 - Lịch sử đặt vé cho người dùng
 - Dashboard admin, CRUD và tìm kiếm/phân trang cho phim, rạp, phòng, ghế, suất chiếu, định dạng, quy tắc giá, đánh giá, đơn vé, thanh toán và người dùng
 - Tạo lịch tự động có xem trước, kiểm tra tương thích định dạng và khoảng vệ sinh 15 phút
-- Quy tắc giá không cộng dồn: ưu tiên `priority` cao nhất, sau đó quy tắc cụ thể hơn, rồi ID thấp hơn; giá theo từng ghế được lưu tại thời điểm đặt
+- Giá suất chiếu được cấu hình riêng cho ghế thường, VIP và ghế đôi; quy tắc giá không cộng dồn: ưu tiên `priority` cao nhất, sau đó quy tắc cụ thể hơn, rồi ID thấp hơn; giá theo từng ghế được lưu tại thời điểm đặt
 - Phân quyền admin ở middleware phía server, khóa/mở khóa tài khoản và giữ lịch sử đơn vé
 
 ## Dữ liệu phim mẫu

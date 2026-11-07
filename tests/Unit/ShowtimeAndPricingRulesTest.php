@@ -4,6 +4,7 @@ namespace Tests\Unit;
 
 use App\Models\PricingRule;
 use App\Models\Booking;
+use App\Models\Showtime;
 use App\Services\ShowtimeRules;
 use App\Services\TicketPriceCalculator;
 use Carbon\Carbon;
@@ -50,6 +51,23 @@ class ShowtimeAndPricingRulesTest extends TestCase
         $fixedRule = new PricingRule(['amount_type' => 'fixed', 'amount' => 100000]);
         $this->assertSame(100000.0, $calculator->calculate(80000, new Collection([$fixedRule])));
         $this->assertSame(80000.0, $calculator->calculate(80000, new Collection));
+    }
+
+    public function test_showtime_uses_a_base_price_for_each_seat_type_and_falls_back_for_legacy_prices(): void
+    {
+        $showtime = new Showtime([
+            'price' => 80000,
+            'vip_price' => 100000,
+            'couple_price' => 160000,
+        ]);
+
+        $this->assertSame(80000.0, $showtime->basePriceForSeatType('standard'));
+        $this->assertSame(100000.0, $showtime->basePriceForSeatType('vip'));
+        $this->assertSame(160000.0, $showtime->basePriceForSeatType('couple'));
+
+        $legacyShowtime = new Showtime(['price' => 80000]);
+        $this->assertSame(80000.0, $legacyShowtime->basePriceForSeatType('vip'));
+        $this->assertSame(80000.0, $legacyShowtime->basePriceForSeatType('couple'));
     }
 
     public function test_booking_qr_contains_a_real_verification_url(): void
