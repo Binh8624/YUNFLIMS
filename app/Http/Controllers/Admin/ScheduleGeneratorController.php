@@ -19,13 +19,13 @@ class ScheduleGeneratorController extends Controller
     public function index()
     {
         return view('admin.showtimes.auto', [
-            'movies' => Movie::where('status', '!=', 'inactive')->orderBy('title')->get(),
-            'rooms' => Room::with(['cinema', 'formats'])
+            'movies' => Movie::with('format')->where('status', '!=', 'inactive')->orderBy('title')->get(),
+            'rooms' => Room::with(['cinema', 'format'])
                 ->where('is_active', true)
                 ->whereHas('cinema', fn ($query) => $query->where('is_active', true))
                 ->orderBy('name')
                 ->get(),
-            'formats' => Format::where('is_active', true)->orderBy('name')->get(),
+            'formats' => Format::whereIn('slug', ['2d', '3d', 'imax'])->where('is_active', true)->orderBy('name')->get(),
             'preview' => session('schedule_preview'),
         ]);
     }
@@ -114,7 +114,7 @@ class ScheduleGeneratorController extends Controller
 
     private function buildPlan(array $data): array
     {
-        $rooms = Room::with('formats')->whereIn('id', $data['room_ids'])->get();
+        $rooms = Room::with(['cinema', 'format'])->whereIn('id', $data['room_ids'])->get();
         $candidates = $this->candidates($data, $rooms);
         $accepted = [];
         $skipped = [];
@@ -151,15 +151,16 @@ class ScheduleGeneratorController extends Controller
 
     private function candidates(array $data, $rooms): array
     {
-        $movie = Movie::findOrFail($data['movie_id']);
+        $movie = Movie::with('format')->findOrFail($data['movie_id']);
         $format = Format::findOrFail($data['format_id']);
 
         if (
             $movie->status === 'inactive'
             || ! $format->is_active
-            || ! $movie->formats()->whereKey($format->id)->exists()
+            || ! in_array($format->slug, ['2d', '3d', 'imax'], true)
+            || (int) $movie->format_id !== (int) $format->id
         ) {
-            throw ValidationException::withMessages(['format_id' => 'Phim không hỗ trợ định dạng đã chọn.']);
+            throw ValidationException::withMessages(['format_id' => 'Định dạng lịch chiếu phải trùng với định dạng của phim.']);
         }
 
         $selectedRoomCount = $rooms->count();
@@ -168,7 +169,7 @@ class ScheduleGeneratorController extends Controller
                 return false;
             }
 
-            if (! $room->formats->contains('id', $format->id)) {
+            if ((int) $room->format_id !== (int) $format->id) {
                 return false;
             }
 

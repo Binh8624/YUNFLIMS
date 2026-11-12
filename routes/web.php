@@ -93,6 +93,11 @@ Route::middleware(['auth', 'active'])->group(function () {
         'selectSeats',
     ])->name('bookings.seats');
 
+    Route::post('/showtimes/{showtime}/seats/check', [
+        BookingController::class,
+        'checkSeatSelection',
+    ])->middleware('throttle:60,1')->name('bookings.seats.check');
+
     Route::post('/showtimes/{showtime}/bookings', [
         BookingController::class,
         'store',

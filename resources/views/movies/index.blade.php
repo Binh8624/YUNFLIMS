@@ -7,7 +7,7 @@
     <div class="container py-5">
         <span class="hero-kicker">MÀN ẢNH RỘNG ĐANG CHỜ BẠN</span>
         <h1 class="display-5 fw-bold mt-2 mb-2">Khám phá phim</h1>
-        <p class="text-secondary mb-0">Tìm câu chuyện tiếp theo theo tên phim, thể loại hoặc độ tuổi.</p>
+        <p class="text-secondary mb-0">Tìm phim theo tên, thể loại và phân loại độ tuổi đã được xác minh.</p>
     </div>
 </section>
 

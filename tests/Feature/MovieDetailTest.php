@@ -7,6 +7,7 @@ use App\Models\Format;
 use App\Models\Movie;
 use App\Models\Room;
 use App\Models\Showtime;
+use App\Models\User;
 use Illuminate\Foundation\Testing\DatabaseTransactions;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
@@ -23,7 +24,8 @@ class MovieDetailTest extends TestCase
         $this->get(route('movies.show', $movie))
             ->assertOk()
             ->assertSee('Đánh giá phim')
-            ->assertSee('Chọn ngày và rạp');
+            ->assertSee('Lịch chiếu tổng hợp')
+            ->assertSee(route('showtimes.index', ['movie_id' => $movie->id]));
     }
 
     public function test_movie_detail_hides_showtimes_for_unsupported_room_formats(): void
@@ -66,6 +68,41 @@ class MovieDetailTest extends TestCase
 
         $this->get(route('movies.show', $movie))
             ->assertOk()
-            ->assertViewHas('movie', fn (Movie $renderedMovie) => $renderedMovie->showtimes->isEmpty());
+            ->assertSee(route('showtimes.index', ['movie_id' => $movie->id]));
+    }
+
+    public function test_admin_can_confirm_official_age_rating_and_feature_a_movie(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+        $admin->forceFill(['is_active' => true])->save();
+        $format = Format::where('slug', '2d')->firstOrFail();
+        $movie = Movie::create([
+            'title' => 'Admin metadata '.Str::random(8),
+            'genre' => 'Hài',
+            'duration' => 95,
+            'status' => 'now_showing',
+            'age_rating' => 'P',
+            'format_id' => $format->id,
+        ]);
+
+        $this->actingAs($admin)
+            ->put(route('admin.movies.update', $movie), [
+                'title' => $movie->title,
+                'genre' => $movie->genre,
+                'duration' => $movie->duration,
+                'status' => $movie->status,
+                'format_id' => $format->id,
+                'age_rating' => 'T13',
+                'age_rating_verified' => '1',
+                'is_featured' => '1',
+            ])
+            ->assertRedirect(route('admin.movies.index'));
+
+        $this->assertDatabaseHas('movies', [
+            'id' => $movie->id,
+            'age_rating' => 'T13',
+            'age_rating_verified' => true,
+            'is_featured' => true,
+        ]);
     }
 }

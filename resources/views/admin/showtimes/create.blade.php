@@ -40,9 +40,10 @@
                 @foreach ($movies as $movie)
                     <option
                         value="{{ $movie->id }}"
+                        data-format-id="{{ $movie->format_id }}"
                         @selected(old('movie_id') == $movie->id)
                     >
-                        {{ $movie->title }}
+                        {{ $movie->title }} — {{ $movie->format?->name }}
                     </option>
                 @endforeach
             </select>
@@ -57,9 +58,10 @@
                 @foreach ($rooms as $room)
                     <option
                         value="{{ $room->id }}"
+                        data-format-id="{{ $room->format_id }}"
                         @selected(old('room_id') == $room->id)
                     >
-                        {{ $room->cinema->name }} — {{ $room->name }}
+                        {{ $room->cinema->name }} — {{ $room->room_code }} — {{ $room->name }} ({{ $room->format?->name }})
                     </option>
                 @endforeach
             </select>
@@ -73,7 +75,7 @@
                     <option value="{{ $format->id }}" @selected(old('format_id') == $format->id)>{{ $format->name }}</option>
                 @endforeach
             </select>
-            <small class="text-secondary">Máy chủ kiểm tra định dạng phim và phòng trước khi lưu.</small>
+            <small class="text-secondary">Định dạng được xác định theo phim; chỉ các phòng tương thích mới khả dụng.</small>
         </div>
 
         <div class="row g-3">
@@ -160,6 +162,28 @@
     const startsOnInput = document.querySelector('[name="starts_on"]');
     const startsTimeInput = document.querySelector('[name="starts_time"]');
     const endsInput = document.querySelector('#ends_at');
+    const roomSelect = document.querySelector('[name="room_id"]');
+    const formatSelect = document.querySelector('[name="format_id"]');
+
+    function updateCompatibleRooms() {
+        const selectedMovie = movieSelect.selectedOptions[0];
+        const formatId = selectedMovie?.dataset.formatId || '';
+        formatSelect.value = formatId;
+        Array.from(formatSelect.options).forEach((option) => {
+            if (option.value) option.disabled = option.value !== formatId;
+        });
+
+        Array.from(roomSelect.options).forEach((option) => {
+            if (!option.value) return;
+            const compatible = formatId !== '' && option.dataset.formatId === formatId;
+            option.hidden = !compatible;
+            option.disabled = !compatible;
+        });
+
+        if (roomSelect.selectedOptions[0]?.disabled) {
+            roomSelect.value = '';
+        }
+    }
 
     function updateEndTime() {
         const duration = Number(movieDurations[movieSelect.value] || 0);
@@ -174,7 +198,9 @@
     }
 
     movieSelect.addEventListener('change', updateEndTime);
+    movieSelect.addEventListener('change', updateCompatibleRooms);
     startsOnInput.addEventListener('change', updateEndTime);
     startsTimeInput.addEventListener('change', updateEndTime);
+    updateCompatibleRooms();
 </script>
 @endsection

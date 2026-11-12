@@ -2,9 +2,7 @@
     <a href="{{ route('movies.show', $movie) }}" class="movie-poster-link text-decoration-none" aria-label="Xem thông tin phim {{ $movie->title }}">
         <img src="{{ $movie->poster ?? 'https://placehold.co/600x900/1b1b22/e50914?text=YUNFLIMS' }}" alt="{{ $movie->title }}" class="movie-poster" loading="lazy">
         <span class="badge badge-red">{{ $movie->label ?? ($movie->status === 'coming_soon' ? 'SẮP CHIẾU' : 'ĐANG CHIẾU') }}</span>
-        @if ($movie->age_rating)
-            <span class="movie-age">{{ $movie->age_rating }}</span>
-        @endif
+        <span class="movie-age" title="{{ $movie->age_rating_verified ? 'Phân loại đã xác minh' : 'Phân loại đang chờ xác minh' }}">{{ $movie->ageRatingLabel() }}</span>
     </a>
 
     <div class="movie-info">
@@ -13,7 +11,8 @@
         </h3>
 
         <p class="movie-meta mb-3">
-            <i class="bi bi-film"></i> {{ $movie->genre ?: 'Đang cập nhật' }}
+            <i class="bi bi-film"></i> {{ implode(' · ', array_slice($movie->genre_labels, 0, 2)) ?: 'Đang cập nhật' }}
+            <br><span class="badge bg-secondary">{{ $movie->format?->name ?? 'Định dạng chưa cập nhật' }}</span>
             <br>
             @if ($movie->duration)
                 <i class="bi bi-clock"></i> {{ $movie->duration }} phút
@@ -40,7 +39,7 @@
                     <span class="badge text-bg-secondary align-self-center">Sắp chiếu</span>
                 @endif
             @else
-                <a href="{{ route('movies.show', $movie) }}#schedule" class="btn btn-red btn-sm">Đặt vé</a>
+                <a href="{{ route('showtimes.index', ['movie_id' => $movie->id]) }}" class="btn btn-red btn-sm">Mua vé</a>
                 @if ($movie->trailer_url)
                     <a href="{{ $movie->trailer_url }}" target="_blank" rel="noopener noreferrer" class="btn btn-outline-light btn-sm" aria-label="Xem trailer phim {{ $movie->title }}">
                         <i class="bi bi-play-fill" aria-hidden="true"></i> Trailer

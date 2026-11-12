@@ -8,7 +8,7 @@
     @if ($errors->any())<div class="alert alert-danger">@foreach ($errors->all() as $error)<div>{{ $error }}</div>@endforeach</div>@endif
     <div class="card bg-dark border-secondary mb-4"><div class="card-body">
         <form method="POST" action="{{ route('admin.showtimes.auto.preview') }}" class="row g-3">@csrf
-            <div class="col-md-6"><label class="form-label">Phim</label><select name="movie_id" class="form-select" required><option value="">Chọn phim</option>@foreach ($movies as $movie)<option value="{{ $movie->id }}" @selected(old('movie_id') == $movie->id)>{{ $movie->title }} · {{ $movie->duration }} phút</option>@endforeach</select></div>
+            <div class="col-md-6"><label class="form-label">Phim</label><select name="movie_id" class="form-select" required><option value="">Chọn phim</option>@foreach ($movies as $movie)<option value="{{ $movie->id }}" data-format-id="{{ $movie->format_id }}" @selected(old('movie_id') == $movie->id)>{{ $movie->title }} · {{ $movie->duration }} phút ({{ $movie->format?->name }})</option>@endforeach</select></div>
             <div class="col-md-6"><label class="form-label">Định dạng</label><select name="format_id" class="form-select" required><option value="">Chọn định dạng</option>@foreach ($formats as $format)<option value="{{ $format->id }}" @selected(old('format_id') == $format->id)>{{ $format->name }}</option>@endforeach</select></div>
             <div class="col-md-3"><label class="form-label">Ngày bắt đầu</label><input type="date" name="starts_on" min="{{ now()->toDateString() }}" value="{{ old('starts_on', now()->toDateString()) }}" class="form-control" required></div>
             <div class="col-md-3"><label class="form-label">Ngày kết thúc</label><input type="date" name="ends_on" min="{{ now()->toDateString() }}" value="{{ old('ends_on', now()->toDateString()) }}" class="form-control" required></div>
@@ -21,7 +21,7 @@
                     <div class="row g-2">
                         @foreach ($rooms as $room)
                             <div class="col-sm-6 col-xl-4">
-                                <label class="schedule-choice w-100">
+                                <label class="schedule-choice w-100 room-format-option" data-format-id="{{ $room->format_id }}">
                                     <input
                                         class="schedule-choice-input"
                                         type="checkbox"
@@ -31,12 +31,8 @@
                                     >
                                     <span class="schedule-choice-card">
                                         <span class="d-block text-warning fw-semibold">{{ $room->cinema->name }}</span>
-                                        <span class="d-block mt-1">{{ $room->name }}</span>
-                                        <span class="d-flex flex-wrap gap-1 mt-2">
-                                            @foreach ($room->formats as $roomFormat)
-                                                <span class="badge bg-secondary">{{ $roomFormat->name }}</span>
-                                            @endforeach
-                                        </span>
+                                        <span class="d-block mt-1">{{ $room->room_code }} — {{ $room->name }}</span>
+                                        <span class="d-block mt-2"><span class="badge bg-secondary">{{ $room->format?->name }}</span></span>
                                     </span>
                                 </label>
                             </div>
@@ -85,6 +81,28 @@
         </div></div>
     @endif
 </div>
+
+<script>
+    const movieSelect = document.querySelector('[name="movie_id"]');
+    const formatSelect = document.querySelector('[name="format_id"]');
+    const roomChoices = document.querySelectorAll('.room-format-option');
+
+    function updateScheduleFormats() {
+        const formatId = movieSelect.selectedOptions[0]?.dataset.formatId || '';
+        formatSelect.value = formatId;
+        Array.from(formatSelect.options).forEach((option) => {
+            if (option.value) option.disabled = option.value !== formatId;
+        });
+        roomChoices.forEach((choice) => {
+            const compatible = formatId !== '' && choice.dataset.formatId === formatId;
+            choice.hidden = !compatible;
+            if (!compatible) choice.querySelector('input').checked = false;
+        });
+    }
+
+    movieSelect.addEventListener('change', updateScheduleFormats);
+    updateScheduleFormats();
+</script>
 
 <style>
     .schedule-choice {

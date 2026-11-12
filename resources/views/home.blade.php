@@ -8,9 +8,8 @@
         <div
             id="featuredMovies"
             class="carousel slide carousel-fade"
-            data-bs-ride="carousel"
-            data-bs-interval="6500"
-            data-bs-pause="hover"
+            data-home-carousel
+            aria-label="Phim nổi bật"
         >
             @if ($featured->count() > 1)
                 <div class="carousel-indicators">
@@ -44,21 +43,20 @@
                                     <p class="hero-description mb-3">{{ $movie->description }}</p>
                                 @endif
                                 <div class="hero-meta" aria-label="Thông tin phim">
-                                    @if ($movie->genre)
-                                        <span><i class="bi bi-film" aria-hidden="true"></i>{{ $movie->genre }}</span>
+                                    @if ($movie->genre_labels)
+                                        <span><i class="bi bi-film" aria-hidden="true"></i>{{ implode(' · ', array_slice($movie->genre_labels, 0, 3)) }}</span>
                                     @endif
                                     @if ($movie->duration)
                                         <span><i class="bi bi-clock" aria-hidden="true"></i>{{ $movie->duration }} phút</span>
                                     @endif
-                                    @if ($movie->age_rating)
-                                        <span><i class="bi bi-person-badge" aria-hidden="true"></i>{{ $movie->age_rating }}</span>
-                                    @endif
+                                    <span><i class="bi bi-badge-3d" aria-hidden="true"></i>{{ $movie->format?->name ?? 'Định dạng chưa cập nhật' }}</span>
+                                    <span><i class="bi bi-person-badge" aria-hidden="true"></i>{{ $movie->ageRatingLabel() }}</span>
                                     @if ($movie->reviews_count > 0)
                                         <span><i class="bi bi-star-fill" aria-hidden="true"></i>{{ number_format((float) $movie->reviews_avg_rating, 1) }}/5</span>
                                     @endif
                                 </div>
                                 <div class="hero-actions">
-                                    <a href="{{ route('movies.show', $movie) }}#schedule" class="btn btn-red">
+                                    <a href="{{ route('showtimes.index', ['movie_id' => $movie->id]) }}" class="btn btn-red">
                                         <i class="bi bi-ticket-perforated me-2" aria-hidden="true"></i>Đặt vé ngay
                                     </a>
                                     <a href="{{ route('movies.show', $movie) }}" class="btn btn-outline-light">
@@ -94,6 +92,31 @@
                 </button>
             @endif
         </div>
+    </section>
+
+    <section class="container home-hot-section" aria-labelledby="hot-movies-title">
+        <div class="home-section-heading">
+            <div>
+                <span class="hero-kicker">ĐƯỢC QUAN TÂM TẠI YUNFLIMS</span>
+                <h2 class="section-title mt-2 mb-0" id="hot-movies-title">Phim hot</h2>
+            </div>
+            <a href="{{ route('movies.index', ['status' => 'now_showing']) }}" class="btn btn-outline-light btn-sm">
+                Khám phá phim <i class="bi bi-arrow-right ms-1" aria-hidden="true"></i>
+            </a>
+        </div>
+        @if ($featured->isEmpty())
+            <div class="cinema-panel home-empty-state">
+                <i class="bi bi-stars" aria-hidden="true"></i>
+                <span>Phim nổi bật sẽ xuất hiện khi có dữ liệu đặt vé/đánh giá hoặc được quản trị viên chọn.</span>
+                <a href="{{ route('showtimes.index') }}">Xem lịch chiếu</a>
+            </div>
+        @else
+            <div class="home-movies-grid home-hot-grid">
+                @foreach ($featured as $movie)
+                    <div>@include('partials.movie-card', ['movie' => $movie])</div>
+                @endforeach
+            </div>
+        @endif
     </section>
 
     <section class="container home-now-showing" id="movies" aria-labelledby="now-showing-title">
@@ -138,28 +161,27 @@
                             aria-label="Xem chi tiết phim {{ $movie->title }}"
                         >
                             <img src="{{ $movie->poster }}" alt="{{ $movie->title }}" loading="lazy">
-                            @if ($movie->age_rating)
-                                <span class="home-movie-rating">{{ $movie->age_rating }}</span>
-                            @endif
+                            <span class="home-movie-rating">{{ $movie->ageRatingLabel() }}</span>
                         </a>
                         <div class="home-movie-info">
                             <h3 class="home-movie-title">
                                 <a href="{{ route('movies.show', $movie) }}">{{ $movie->title }}</a>
                             </h3>
                             <p class="home-movie-meta">
-                                @if ($movie->genre)
-                                    <span>{{ $movie->genre }}</span>
+                                @if ($movie->genre_labels)
+                                    <span>{{ implode(' · ', array_slice($movie->genre_labels, 0, 2)) }}</span>
                                 @endif
                                 @if ($movie->duration)
                                     <span>{{ $movie->duration }} phút</span>
                                 @endif
+                                <span>{{ $movie->format?->name ?? 'Định dạng chưa cập nhật' }}</span>
                                 @if ($movie->reviews_count > 0)
                                     <span class="home-movie-score"><i class="bi bi-star-fill" aria-hidden="true"></i> {{ number_format((float) $movie->reviews_avg_rating, 1) }}</span>
                                 @endif
                             </p>
                             <div class="home-movie-actions">
                                 <a href="{{ route('movies.show', $movie) }}" class="btn btn-outline-light">Chi tiết</a>
-                                <a href="{{ route('movies.show', $movie) }}#schedule" class="btn btn-red">Đặt vé</a>
+                                <a href="{{ route('showtimes.index', ['movie_id' => $movie->id]) }}" class="btn btn-red">Đặt vé</a>
                             </div>
                         </div>
                     </article>
@@ -195,15 +217,17 @@
                             aria-label="Xem chi tiết phim {{ $movie->title }}"
                         >
                             <img src="{{ $movie->poster }}" alt="{{ $movie->title }}" loading="lazy">
-                            @if ($movie->age_rating)
-                                <span class="home-movie-rating">{{ $movie->age_rating }}</span>
-                            @endif
+                            <span class="home-movie-rating">{{ $movie->ageRatingLabel() }}</span>
                         </a>
                         <div class="home-movie-info">
                             <h3 class="home-movie-title">
                                 <a href="{{ route('movies.show', $movie) }}">{{ $movie->title }}</a>
                             </h3>
                             <p class="home-movie-meta home-release-date">
+                                @if ($movie->genre_labels)
+                                    <span>{{ implode(' · ', array_slice($movie->genre_labels, 0, 2)) }}</span>
+                                @endif
+                                <span class="badge bg-secondary">{{ $movie->format?->name ?? 'Định dạng chưa cập nhật' }}</span>
                                 <i class="bi bi-calendar3" aria-hidden="true"></i>
                                 Ngày khởi chiếu đang cập nhật
                             </p>

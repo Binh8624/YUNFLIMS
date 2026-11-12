@@ -12,6 +12,7 @@ class Room extends Model
         'cinema_id',
         'room_code',
         'name',
+        'format_id',
         'total_seats',
         'is_active',
     ];
@@ -37,6 +38,11 @@ class Room extends Model
     public function formats(): \Illuminate\Database\Eloquent\Relations\BelongsToMany
     {
         return $this->belongsToMany(Format::class, 'room_format');
+    }
+
+    public function format(): BelongsTo
+    {
+        return $this->belongsTo(Format::class);
     }
 
     public function showtimes(): HasMany

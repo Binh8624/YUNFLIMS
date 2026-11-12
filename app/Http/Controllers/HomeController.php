@@ -3,17 +3,26 @@
 namespace App\Http\Controllers;
 
 use App\Models\Movie;
-use App\Models\Cinema;
+use App\Support\MovieGenres;
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
 
 class HomeController extends Controller
 {
-    public function index(Request $request)
+    public function index()
     {
-        $featured = Movie::query()
+        $hasPopularityData = Movie::query()
+            ->whereHas('bookings', fn (Builder $bookings) => $bookings->where('bookings.status', 'confirmed'))
+            ->exists()
+            || DB::table('reviews')->exists();
+
+        $featuredQuery = Movie::query()
+            ->with('format')
             ->where('status', 'now_showing')
+            ->where('age_rating', '<>', 'C')
             ->whereNotNull('title')
             ->where('title', '<>', '')
             ->whereNotNull('poster')
@@ -23,15 +32,25 @@ class HomeController extends Controller
             ->withCount([
                 'bookings as bookings_count' => fn (Builder $bookings) => $bookings
                     ->where('bookings.status', 'confirmed'),
-            ])
-            ->orderByDesc('bookings_count')
-            ->orderByDesc('reviews_avg_rating')
-            ->orderByDesc('created_at')
-            ->limit(3)
-            ->get();
+            ]);
+
+        if ($hasPopularityData) {
+            $featuredQuery
+                ->where(fn (Builder $query) => $query
+                    ->whereHas('bookings', fn (Builder $bookings) => $bookings->where('bookings.status', 'confirmed'))
+                    ->orWhereHas('reviews'))
+                ->orderByDesc('bookings_count')
+                ->orderByDesc('reviews_avg_rating');
+        } else {
+            $featuredQuery->where('is_featured', true);
+        }
+
+        $featured = $featuredQuery->orderByDesc('created_at')->limit(5)->get();
 
         $movies = Movie::query()
+            ->with('format')
             ->where('status', 'now_showing')
+            ->where('age_rating', '<>', 'C')
             ->whereNotNull('title')
             ->where('title', '<>', '')
             ->whereNotNull('poster')
@@ -45,7 +64,9 @@ class HomeController extends Controller
             ->get();
 
         $comingSoon = Movie::query()
+            ->with('format')
             ->where('status', 'coming_soon')
+            ->where('age_rating', '<>', 'C')
             ->whereNotNull('title')
             ->where('title', '<>', '')
             ->whereNotNull('poster')
@@ -59,16 +80,28 @@ class HomeController extends Controller
 
     public function movies(Request $request)
     {
+        $publicMovies = Movie::query()
+            ->whereIn('status', ['now_showing', 'coming_soon'])
+            ->where('age_rating', '<>', 'C');
+        $genres = MovieGenres::options((clone $publicMovies)->pluck('genre'));
+        $ageRatings = (clone $publicMovies)
+            ->where('age_rating_verified', true)
+            ->whereNotNull('age_rating')
+            ->where('age_rating', '<>', '')
+            ->distinct()
+            ->orderBy('age_rating')
+            ->pluck('age_rating');
+
         $filters = $request->validate([
             'search' => ['nullable', 'string', 'max:100'],
             'status' => ['nullable', 'in:now_showing,coming_soon'],
-            'genre' => ['nullable', 'string', 'max:150'],
-            'age_rating' => ['nullable', 'string', 'max:20'],
+            'genre' => ['nullable', 'string', Rule::in($genres)],
+            'age_rating' => ['nullable', 'string', Rule::in($ageRatings->all())],
             'sort' => ['nullable', 'in:newest,popular,rated,title'],
         ]);
 
-        $query = Movie::query()
-            ->whereIn('status', ['now_showing', 'coming_soon'])
+        $query = (clone $publicMovies)
+            ->with('format')
             ->withAvg('reviews', 'rating')
             ->withCount('reviews')
             ->withCount([
@@ -86,11 +119,12 @@ class HomeController extends Controller
         }
 
         if (! empty($filters['genre'])) {
-            $query->where('genre', $filters['genre']);
+            MovieGenres::applyFilter($query, $filters['genre']);
         }
 
         if (! empty($filters['age_rating'])) {
-            $query->where('age_rating', $filters['age_rating']);
+            $query->where('age_rating_verified', true)
+                ->where('age_rating', $filters['age_rating']);
         }
 
         match ($filters['sort'] ?? 'newest') {
@@ -101,18 +135,6 @@ class HomeController extends Controller
         };
 
         $movies = $query->paginate(12)->withQueryString();
-        $genres = Movie::whereIn('status', ['now_showing', 'coming_soon'])
-            ->whereNotNull('genre')
-            ->where('genre', '<>', '')
-            ->distinct()
-            ->orderBy('genre')
-            ->pluck('genre');
-        $ageRatings = Movie::whereIn('status', ['now_showing', 'coming_soon'])
-            ->whereNotNull('age_rating')
-            ->where('age_rating', '<>', '')
-            ->distinct()
-            ->orderBy('age_rating')
-            ->pluck('age_rating');
 
         return view('movies.index', compact('movies', 'genres', 'ageRatings'));
     }
@@ -126,6 +148,7 @@ class HomeController extends Controller
 
         $titles = Movie::query()
             ->whereIn('status', ['now_showing', 'coming_soon'])
+            ->where('age_rating', '<>', 'C')
             ->where('title', 'like', "%{$search}%")
             ->orderBy('title')
             ->limit(8)
@@ -136,61 +159,28 @@ class HomeController extends Controller
 
     public function show(Request $request, Movie $movie)
     {
-        abort_if($movie->status === 'inactive', 404);
-
+        abort_if($movie->status === 'inactive' || $movie->age_rating === 'C', 404);
         $validated = $request->validate([
             'date' => ['nullable', 'date', 'after_or_equal:today'],
-            'cinema_id' => ['nullable', 'integer', 'exists:cinemas,id'],
         ]);
-        $date = $validated['date'] ?? now()->toDateString();
-        $dayStart = \Illuminate\Support\Carbon::parse($date)->startOfDay();
-        $dayEnd = $dayStart->copy()->addDay();
-        $showDates = collect(range(0, 13))
-            ->map(fn (int $offset) => now()->startOfDay()->addDays($offset));
-
-        if (! $showDates->contains(fn ($showDate) => $showDate->toDateString() === $date)) {
-            $showDates->push(\Illuminate\Support\Carbon::parse($date)->startOfDay());
-        }
-
-        $showDates = $showDates
-            ->sortBy(fn ($showDate) => $showDate->timestamp)
-            ->values();
+        $date = $validated['date'] ?? null;
 
         $movie->load([
-            'formats' => fn ($query) => $query->where('formats.is_active', true),
-            'showtimes' => function ($query) use ($dayStart, $dayEnd, $validated) {
-                $query->with(['room.cinema', 'format'])
-                    ->where('status', 'scheduled')
-                    ->where('starts_at', '>', now())
-                    ->where('starts_at', '>=', $dayStart)
-                    ->where('starts_at', '<', $dayEnd)
-                    ->whereHas('format', fn ($format) => $format->where('is_active', true))
-                    ->whereHas('room', fn ($room) => $room->where('is_active', true)
-                        ->whereHas('cinema', fn ($cinema) => $cinema->where('is_active', true)))
-                    ->whereHas('movie.formats', fn ($format) => $format
-                        ->whereColumn('formats.id', 'showtimes.format_id')
-                        ->where('formats.is_active', true))
-                    ->whereHas('room.formats', fn ($format) => $format
-                        ->whereColumn('formats.id', 'showtimes.format_id')
-                        ->where('formats.is_active', true))
-                    ->when(
-                        isset($validated['cinema_id']),
-                        fn ($query) => $query->whereHas(
-                            'room.cinema',
-                            fn ($cinema) => $cinema->whereKey($validated['cinema_id'])
-                        )
-                    )
-                    ->orderBy('starts_at');
-            },
+            'format',
             'reviews' => fn ($query) => $query->with('user')->latest()->limit(20),
         ]);
 
         $movie->loadCount('reviews')->loadAvg('reviews', 'rating');
-        $cinemas = Cinema::where('is_active', true)->orderBy('name')->get();
+        $relatedGenre = $movie->genre_labels[0] ?? null;
         $relatedMovies = Movie::query()
+            ->with('format')
             ->where('id', '<>', $movie->getKey())
-            ->where('genre', $movie->genre)
             ->whereIn('status', ['now_showing', 'coming_soon'])
+            ->where('age_rating', '<>', 'C')
+            ->when(
+                $relatedGenre !== null,
+                fn (Builder $query) => MovieGenres::applyFilter($query, $relatedGenre)
+            )
             ->withAvg('reviews', 'rating')
             ->withCount('reviews')
             ->latest()
@@ -200,14 +190,7 @@ class HomeController extends Controller
             ? $movie->reviews()->where('user_id', auth()->id())->first()
             : null;
 
-        return view('movies.show', compact(
-            'movie',
-            'date',
-            'showDates',
-            'cinemas',
-            'myReview',
-            'relatedMovies'
-        ));
+        return view('movies.show', compact('movie', 'relatedMovies', 'myReview', 'relatedGenre', 'date'));
     }
 }
 

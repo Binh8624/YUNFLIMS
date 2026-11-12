@@ -89,7 +89,11 @@ class MovieSeeder extends Seeder
                 }
 
                 if ($defaultFormat) {
-                    $savedMovie->formats()->syncWithoutDetaching([$defaultFormat->id]);
+                    if (! $savedMovie->format_id) {
+                        $savedMovie->update(['format_id' => $defaultFormat->id]);
+                    }
+
+                    $savedMovie->formats()->sync([(int) $savedMovie->format_id]);
                 }
             }
         });

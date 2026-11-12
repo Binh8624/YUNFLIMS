@@ -28,7 +28,13 @@ Website đặt vé xem phim Laravel 12 sử dụng Blade và Bootstrap. Hệ th�
    php artisan migrate
    ```
    Lệnh này chỉ áp dụng migration còn thiếu, không xóa dữ liệu. Không dùng `migrate:fresh` hoặc `db:wipe` trên dữ liệu cần giữ. Chỉ chạy `php artisan db:seed` ở môi trường local khi thực sự muốn dữ liệu mẫu; seeder tạo tài khoản mẫu và không nên chạy lặp trên production.
-5. Chạy local server:
+   Migration định dạng thêm trường định dạng duy nhất cho phim và phòng, ưu tiên định dạng đang dùng nhiều nhất trong lịch chiếu hiện có rồi đến cấu hình cũ; dữ liệu ghế, lịch chiếu và vé không bị xóa. Migration bổ sung metadata phim đặt phân loại tuổi cũ ở trạng thái chưa xác minh và thêm cờ phim nổi bật, không tạo hoặc thay đổi phim/lịch chiếu.
+5. Để bổ sung năm phòng mẫu cùng sơ đồ 60 ghế mà không tạo trùng, chạy:
+   ```bash
+   php artisan db:seed --class="Database\Seeders\CinemaSeeder"
+   ```
+   Seeder giữ nguyên phòng và ghế đang có; định dạng năm phòng mới được chia thành 2D, 3D và IMAX.
+6. Chạy local server:
    ```bash
    php artisan serve
    ```
@@ -41,9 +47,10 @@ Website đặt vé xem phim Laravel 12 sử dụng Blade và Bootstrap. Hệ th�
 ## Chức năng chính
 
 - Trang chủ với banner, tìm kiếm và danh sách phim
-- Chi tiết phim kèm lịch chiếu
-- Lịch chiếu lọc theo ngày/rạp, định dạng phim, thời lượng, phân loại độ tuổi, trailer và đánh giá người dùng
+- Trang chi tiết và danh sách phim dùng chung cách hiển thị thể loại, định dạng và trạng thái xác minh phân loại tuổi
+- Trang lịch chiếu tổng hợp lọc theo ngày có suất thực tế, thành phố, rạp, phim, thể loại và định dạng; giờ chiếu được nhóm theo rạp/phim và liên kết đúng suất chiếu
 - Chọn suất chiếu trong tương lai, xem giá theo ghế và chọn ghế theo sơ đồ phòng
+- Sơ đồ ghế kiểm tra trạng thái đặt/giữ tức thời, thời hạn giữ 5 phút và quy tắc không để ghế lẻ theo từng hàng; máy chủ kiểm tra lại trong transaction trước khi tạo booking
 - Tạo đơn đặt vé và thanh toán thử nghiệm
 - Giữ ghế tối đa 10 phút trong lúc thanh toán; ghế hết hạn được giải phóng khi có yêu cầu đặt mới
 - Thanh toán mô phỏng cho phép chọn kết quả thành công/thất bại; không thu thập thông tin thẻ và chưa kết nối cổng thật
@@ -52,6 +59,11 @@ Website đặt vé xem phim Laravel 12 sử dụng Blade và Bootstrap. Hệ th�
 - Lịch sử đặt vé cho người dùng
 - Dashboard admin, CRUD và tìm kiếm/phân trang cho phim, rạp, phòng, ghế, suất chiếu, định dạng, quy tắc giá, đánh giá, đơn vé, thanh toán và người dùng
 - Tạo lịch tự động có xem trước, kiểm tra tương thích định dạng và khoảng vệ sinh 15 phút
+- Lệnh `showtimes:generate-test` tạo lịch thử nghiệm best-effort trong 7 ngày, chỉ dùng rạp/phòng đang hoạt động có định dạng tương thích; lệnh giữ nguyên lịch cũ, tránh trùng lặp, ghi log các lần bỏ qua và từ chối chạy trên production
+- Mỗi phim và phòng có một định dạng cố định: 2D, 3D hoặc IMAX; lịch chiếu và đặt vé chỉ chấp nhận định dạng trùng khớp
+- Phim nổi bật lấy từ đặt vé đã xác nhận/đánh giá thực tế; khi chưa có thống kê, quản trị viên có thể chọn phim nổi bật trong form phim. Không tự tạo chỉ số phổ biến.
+- Phân loại tuổi P/K/T13/T16/T18/C chỉ hiển thị mã sau khi quản trị viên xác nhận; dữ liệu cũ được gắn cờ cần xác minh, không tự suy đoán từ tên hoặc thể loại. C bị loại khỏi danh mục và luồng đặt vé công khai.
+- Thể loại nhiều nhãn được tách thành các thể loại ngắn từ dữ liệu hiện có để hiển thị/lọc; chuỗi thể loại gốc trong database được giữ nguyên.
 - Giá suất chiếu được cấu hình riêng cho ghế thường, VIP và ghế đôi; quy tắc giá không cộng dồn: ưu tiên `priority` cao nhất, sau đó quy tắc cụ thể hơn, rồi ID thấp hơn; giá theo từng ghế được lưu tại thời điểm đặt
 - Phân quyền admin ở middleware phía server, khóa/mở khóa tài khoản và giữ lịch sử đơn vé
 
@@ -64,6 +76,16 @@ Website đặt vé xem phim Laravel 12 sử dụng Blade và Bootstrap. Hệ th�
 Tài khoản có role `admin` truy cập `/admin`. Dashboard liên kết đến quản lý phim, đánh giá, rạp, phòng/ghế, định dạng, lịch chiếu/tạo lịch tự động, bảng giá, đơn vé, thanh toán và người dùng. Tài khoản bị khóa sẽ bị từ chối đăng nhập và phiên đang hoạt động sẽ bị đăng xuất ở request kế tiếp.
 
 Không xóa được phim, rạp hoặc phòng còn liên kết dữ liệu lịch sử; hãy chuyển sang trạng thái tạm ngưng/ẩn để bảo toàn đơn vé và lịch chiếu.
+
+## Tạo lịch chiếu thử nghiệm
+
+Trong môi trường local hoặc testing, xem lại kế hoạch trước khi xác nhận:
+
+```bash
+php artisan showtimes:generate-test
+```
+
+Lệnh yêu cầu xác nhận, tạo lịch trong 7 ngày từ phim `now_showing`, và báo cáo số phim/rạp/phòng, suất đã tạo/bỏ qua, phim chưa có suất hợp lệ cùng thống kê theo ngày/rạp. Mục tiêu là 3–5 suất mỗi phim mỗi ngày, nhưng lịch được tạo best-effort: giới hạn giờ 08:00–23:00, định dạng phòng/phim, thời lượng, lịch có sẵn và thời gian vệ sinh 15 phút luôn được ưu tiên. Nếu không đủ công suất, lệnh ghi rõ nguyên nhân bỏ qua thay vì tạo lịch không hợp lệ. Không xóa/sửa lịch cũ. Có thể dùng `php artisan showtimes:generate-test --force` để bỏ qua xác nhận tương tác; lệnh vẫn từ chối môi trường production.
 
 ## Giao diện & bảo mật
 

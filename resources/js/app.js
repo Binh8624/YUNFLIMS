@@ -89,3 +89,46 @@ document.querySelectorAll('[data-movie-suggestions]').forEach((input) => {
         }, 200);
     });
 });
+
+document.querySelectorAll('[data-home-carousel]').forEach((element) => {
+    const Carousel = window.bootstrap?.Carousel;
+
+    if (! Carousel || element.querySelectorAll('.carousel-item').length < 2) {
+        return;
+    }
+
+    const carousel = Carousel.getOrCreateInstance(element, {
+        interval: 6500,
+        pause: 'hover',
+        touch: true,
+        wrap: true,
+    });
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+
+    if (reducedMotion.matches) {
+        carousel.pause();
+    } else {
+        carousel.cycle();
+    }
+
+    reducedMotion.addEventListener('change', (event) => {
+        if (event.matches) {
+            carousel.pause();
+        } else {
+            carousel.cycle();
+        }
+    });
+});
+
+document.querySelectorAll('[data-schedule-city]').forEach((citySelect) => {
+    citySelect.addEventListener('change', () => {
+        const form = citySelect.form;
+        const cinemaSelect = form?.elements.namedItem('cinema_id');
+
+        if (cinemaSelect) {
+            cinemaSelect.value = '';
+        }
+
+        form?.requestSubmit();
+    });
+});

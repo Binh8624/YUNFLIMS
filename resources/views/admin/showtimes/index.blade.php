@@ -39,7 +39,7 @@
                 <tr>
                     <th>Phim</th>
                     <th>Rạp / Phòng</th>
-                    <th>Định dạng</th>
+                    <th>Định dạng phim / phòng</th>
                     <th>Bắt đầu</th>
                     <th>Kết thúc</th>
                     <th>Giá vé</th>
@@ -59,7 +59,7 @@
                                 {{ $showtime->room->name }}
                             </small>
                         </td>
-                        <td>{{ $showtime->format?->name ?? '2D' }}</td>
+                        <td>{{ $showtime->movie->format?->name ?? 'Chưa thiết lập' }} / {{ $showtime->room->format?->name ?? 'Chưa thiết lập' }}</td>
 
                         <td>
                             {{ $showtime->starts_at->format('d/m/Y H:i') }}

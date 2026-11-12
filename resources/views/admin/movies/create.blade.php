@@ -74,24 +74,32 @@
             <div class="col-md-6 mb-3">
                 <label class="form-label">Phân loại độ tuổi *</label>
                 <select name="age_rating" class="form-select" required>
-                    @foreach (['P' => 'P - Phổ biến', 'T13' => 'T13', 'T16' => 'T16', 'T18' => 'T18', 'C' => 'C - Cấm phổ biến'] as $value => $label)
+                    @foreach (['P' => 'P - Phổ biến mọi lứa tuổi', 'K' => 'K - Dưới 13 tuổi cần người giám hộ', 'T13' => 'T13 - Từ đủ 13 tuổi', 'T16' => 'T16 - Từ đủ 16 tuổi', 'T18' => 'T18 - Từ đủ 18 tuổi', 'C' => 'C - Không được phép phổ biến'] as $value => $label)
                         <option value="{{ $value }}" @selected(old('age_rating', 'P') === $value)>{{ $label }}</option>
                     @endforeach
                 </select>
+                <div class="form-text text-warning">Chỉ xác nhận sau khi đối chiếu thông tin chính thức từ nhà phát hành hoặc cơ quan có thẩm quyền.</div>
+                <div class="form-check mt-2">
+                    <input class="form-check-input" type="checkbox" name="age_rating_verified" value="1" id="age-rating-verified" @checked(old('age_rating_verified'))>
+                    <label class="form-check-label" for="age-rating-verified">Tôi đã xác minh phân loại chính thức này</label>
+                </div>
             </div>
         </div>
 
-        <fieldset class="mb-4">
-            <legend class="form-label">Định dạng phim *</legend>
-            <div class="d-flex flex-wrap gap-3">
+        <div class="form-check mb-4">
+            <input class="form-check-input" type="checkbox" name="is_featured" value="1" id="movie-featured" @checked(old('is_featured'))>
+            <label class="form-check-label" for="movie-featured">Đánh dấu phim nổi bật trên trang chủ</label>
+        </div>
+
+        <div class="mb-4">
+            <label for="format_id" class="form-label">Định dạng phim *</label>
+            <select id="format_id" name="format_id" class="form-select" required>
+                <option value="">-- Chọn định dạng --</option>
                 @foreach ($formats as $format)
-                    <label class="form-check">
-                        <input class="form-check-input" type="checkbox" name="formats[]" value="{{ $format->id }}" @checked(in_array($format->id, old('formats', [])))>
-                        <span class="form-check-label">{{ $format->name }}</span>
-                    </label>
+                    <option value="{{ $format->id }}" @selected(old('format_id') == $format->id)>{{ $format->name }}</option>
                 @endforeach
-            </div>
-        </fieldset>
+            </select>
+        </div>
 
         <div class="mb-4">
             <label class="form-label">Trạng thái *</label>

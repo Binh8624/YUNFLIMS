@@ -16,14 +16,14 @@
     </form>
     <div class="card bg-dark border-secondary"><div class="table-responsive">
         <table class="table table-dark table-hover align-middle mb-0">
-            <thead><tr><th>Rạp</th><th>Phòng</th><th>Sức chứa</th><th>Ghế đã tạo</th><th>Trạng thái</th><th>Thao tác</th></tr></thead>
+            <thead><tr><th>Rạp</th><th>Mã phòng</th><th>Tên phòng</th><th>Định dạng</th><th>Sức chứa</th><th>Ghế đã tạo</th><th>Trạng thái</th><th>Thao tác</th></tr></thead>
             <tbody>
                 @forelse ($rooms as $room)
-                    <tr><td>{{ $room->cinema->name }}</td><td>{{ $room->name }}</td><td>{{ $room->total_seats }}</td><td>{{ $room->seats_count }}</td>
+                    <tr><td>{{ $room->cinema->name }}</td><td>{{ $room->room_code }}</td><td>{{ $room->name }}</td><td><span class="badge bg-info text-dark">{{ $room->format?->name ?? 'Chưa thiết lập' }}</span></td><td>{{ $room->total_seats }}</td><td>{{ $room->seats_count }}</td>
                         <td><span class="badge {{ $room->is_active ? 'bg-success' : 'bg-secondary' }}">{{ $room->is_active ? 'Hoạt động' : 'Tạm ngưng' }}</span></td>
                         <td><div class="d-flex flex-wrap gap-2"><a class="btn btn-sm btn-outline-info" href="{{ route('admin.rooms.seats.index', $room) }}">Sơ đồ ghế</a><a class="btn btn-sm btn-primary" href="{{ route('admin.rooms.edit', $room) }}">Sửa</a>
                             <form method="POST" action="{{ route('admin.rooms.destroy', $room) }}" onsubmit="return confirm('Xóa phòng này?')">@csrf @method('DELETE')<button class="btn btn-sm btn-danger">Xóa</button></form></div></td></tr>
-                @empty<tr><td colspan="6" class="text-center text-secondary py-4">Chưa có phòng phù hợp.</td></tr>@endforelse
+                @empty<tr><td colspan="8" class="text-center text-secondary py-4">Chưa có phòng phù hợp.</td></tr>@endforelse
             </tbody>
         </table>
     </div></div>

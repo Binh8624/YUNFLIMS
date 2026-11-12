@@ -14,6 +14,7 @@ class MovieController extends Controller
     public function index(Request $request)
     {
         $movies = Movie::query()
+            ->with('format')
             ->when($request->filled('search'), function ($query) use ($request) {
                 $search = trim($request->string('search')->toString());
                 $query->where(function ($query) use ($search) {
@@ -22,6 +23,14 @@ class MovieController extends Controller
                 });
             })
             ->when($request->filled('status'), fn ($query) => $query->where('status', $request->input('status')))
+            ->when(
+                $request->input('age_rating_verified') === '0',
+                fn ($query) => $query->where('age_rating_verified', false)
+            )
+            ->when(
+                $request->input('age_rating_verified') === '1',
+                fn ($query) => $query->where('age_rating_verified', true)
+            )
             ->latest()
             ->paginate(10)
             ->withQueryString();
@@ -32,7 +41,7 @@ class MovieController extends Controller
     public function create()
     {
         return view('admin.movies.create', [
-            'formats' => Format::where('is_active', true)->orderBy('name')->get(),
+            'formats' => Format::whereIn('slug', ['2d', '3d', 'imax'])->where('is_active', true)->orderBy('name')->get(),
         ]);
     }
 
@@ -46,15 +55,17 @@ class MovieController extends Controller
             'poster' => 'nullable|url|max:2048',
             'description' => 'nullable|string',
             'trailer_url' => ['nullable', 'url', 'max:2048'],
-            'age_rating' => ['required', 'in:P,T13,T16,T18,C'],
+            'age_rating' => ['required', 'in:P,K,T13,T16,T18,C'],
+            'age_rating_verified' => ['nullable', 'boolean'],
+            'is_featured' => ['nullable', 'boolean'],
             'status' => 'required|in:now_showing,coming_soon,inactive',
-            'formats' => ['required', 'array', 'min:1'],
-            'formats.*' => ['required', 'integer', 'distinct', 'exists:formats,id,is_active,1'],
+            'format_id' => ['required', 'integer', 'exists:formats,id'],
         ]);
 
-        $formatIds = $validated['formats'];
-        unset($validated['formats']);
-        Movie::create($validated)->formats()->sync($formatIds);
+        $format = $this->activeCinemaFormat((int) $validated['format_id']);
+        $validated['age_rating_verified'] = $request->boolean('age_rating_verified');
+        $validated['is_featured'] = $request->boolean('is_featured');
+        Movie::create($validated)->formats()->sync([$format->id]);
 
         return redirect()
             ->route('admin.movies.index')
@@ -64,8 +75,8 @@ class MovieController extends Controller
     public function edit(Movie $movie)
     {
         return view('admin.movies.edit', [
-            'movie' => $movie->load('formats'),
-            'formats' => Format::where('is_active', true)->orderBy('name')->get(),
+            'movie' => $movie->load('format'),
+            'formats' => Format::whereIn('slug', ['2d', '3d', 'imax'])->where('is_active', true)->orderBy('name')->get(),
         ]);
     }
 
@@ -79,30 +90,28 @@ class MovieController extends Controller
             'poster' => 'nullable|url|max:2048',
             'description' => 'nullable|string',
             'trailer_url' => ['nullable', 'url', 'max:2048'],
-            'age_rating' => ['required', 'in:P,T13,T16,T18,C'],
+            'age_rating' => ['required', 'in:P,K,T13,T16,T18,C'],
+            'age_rating_verified' => ['nullable', 'boolean'],
+            'is_featured' => ['nullable', 'boolean'],
             'status' => 'required|in:now_showing,coming_soon,inactive',
-            'formats' => ['required', 'array', 'min:1'],
-            'formats.*' => ['required', 'integer', 'distinct', 'exists:formats,id,is_active,1'],
+            'format_id' => ['required', 'integer', 'exists:formats,id'],
         ]);
 
-        $formatIds = $validated['formats'];
-        unset($validated['formats']);
+        $format = $this->activeCinemaFormat((int) $validated['format_id']);
+        $validated['age_rating_verified'] = $request->boolean('age_rating_verified');
+        $validated['is_featured'] = $request->boolean('is_featured');
 
-        DB::transaction(function () use ($movie, $validated, $formatIds) {
+        DB::transaction(function () use ($movie, $validated, $format) {
             $lockedMovie = Movie::whereKey($movie->id)->lockForUpdate()->firstOrFail();
-            if (
-                $lockedMovie->showtimes()
-                    ->where('status', 'scheduled')
-                    ->whereNotIn('format_id', $formatIds)
-                    ->exists()
-            ) {
+            if ((int) $lockedMovie->format_id !== (int) $format->id
+                && $lockedMovie->showtimes()->where('format_id', '!=', $format->id)->exists()) {
                 throw ValidationException::withMessages([
-                    'formats' => 'Không thể bỏ định dạng đang được sử dụng bởi suất chiếu đã lên lịch.',
+                    'format_id' => 'Không thể đổi định dạng vì phim đã có suất chiếu hoặc vé gắn với định dạng hiện tại.',
                 ]);
             }
 
             $lockedMovie->update($validated);
-            $lockedMovie->formats()->sync($formatIds);
+            $lockedMovie->formats()->sync([$format->id]);
         });
 
         return redirect()
@@ -123,5 +132,21 @@ class MovieController extends Controller
         return redirect()
             ->route('admin.movies.index')
             ->with('success', 'Xóa phim thành công!');
+    }
+
+    private function activeCinemaFormat(int $formatId): Format
+    {
+        $format = Format::whereKey($formatId)
+            ->whereIn('slug', ['2d', '3d', 'imax'])
+            ->where('is_active', true)
+            ->first();
+
+        if (! $format) {
+            throw ValidationException::withMessages([
+                'format_id' => 'Chọn một định dạng hợp lệ: 2D, 3D hoặc IMAX.',
+            ]);
+        }
+
+        return $format;
     }
 }
