@@ -66,6 +66,30 @@ class CinemaDiscoveryTest extends TestCase
             ->assertDontSee($actionMovie->title);
     }
 
+    public function test_movie_schedule_defaults_to_its_next_available_date(): void
+    {
+        $format = Format::where('slug', '2d')->firstOrFail();
+        $movie = $this->movie($format, 'Phiêu lưu');
+        $startsAt = Carbon::tomorrow()->setTime(18, 30);
+        $showtime = $this->showtime($movie, 'Hà Nội', $format, $startsAt);
+
+        $this->get(route('showtimes.index', ['movie_id' => $movie->id]))
+            ->assertOk()
+            ->assertViewHas('date', $startsAt->toDateString())
+            ->assertViewHas('showtimes', fn ($showtimes) => $showtimes->contains('id', $showtime->id))
+            ->assertSee($movie->title)
+            ->assertSee('18:30');
+    }
+
+    public function test_movie_without_eligible_showtimes_shows_a_helpful_message(): void
+    {
+        $movie = $this->movie(Format::where('slug', '2d')->firstOrFail(), 'Phiêu lưu');
+
+        $this->get(route('showtimes.index', ['movie_id' => $movie->id]))
+            ->assertOk()
+            ->assertSee('Hiện chưa có lịch chiếu cho bộ phim này. Vui lòng quay lại sau.');
+    }
+
     public function test_home_and_movie_buy_actions_use_the_same_central_schedule(): void
     {
         $movie = $this->movie(Format::where('slug', '2d')->firstOrFail(), 'Tâm lý');

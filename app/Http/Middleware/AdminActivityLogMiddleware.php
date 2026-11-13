@@ -16,7 +16,7 @@ class AdminActivityLogMiddleware
 
         if (
             ! $request->user()
-            || $request->user()->role !== 'admin'
+            || ! $request->user()->isAdminStaff()
             || ! in_array($request->method(), ['POST', 'PUT', 'PATCH', 'DELETE'], true)
         ) {
             return $response;

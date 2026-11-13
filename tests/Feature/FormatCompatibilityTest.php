@@ -10,6 +10,8 @@ use App\Models\Seat;
 use App\Models\Showtime;
 use App\Models\User;
 use Database\Seeders\CinemaSeeder;
+use Database\Seeders\DatabaseSeeder;
+use Database\Seeders\MovieSeeder;
 use Illuminate\Foundation\Testing\DatabaseTransactions;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
@@ -166,6 +168,82 @@ class FormatCompatibilityTest extends TestCase
         $this->assertSame(60, $rooms->min(fn (Room $room) => $room->seats->count()));
         foreach ($rooms as $room) {
             $this->assertSame(20, $room->seats->where('seat_type', 'vip')->count());
+        }
+    }
+
+    public function test_cinema_seeder_fills_an_empty_existing_room_without_replacing_existing_seats(): void
+    {
+        $format = Format::where('slug', '2d')->firstOrFail();
+        $cinema = Cinema::firstOrCreate(
+            ['name' => 'YUNFLIMS Hà Nội'],
+            [
+                'address' => 'Test address',
+                'city' => 'Hà Nội',
+                'is_active' => true,
+            ]
+        );
+        Room::where('cinema_id', $cinema->id)
+            ->whereIn('name', ['Phòng 02', 'Phòng 03'])
+            ->get()
+            ->each(fn (Room $room) => $room->update(['name' => 'Preserved '.$room->id]));
+
+        $emptyRoom = Room::create([
+            'cinema_id' => $cinema->id,
+            'room_code' => 'EMPTY-03',
+            'name' => 'Phòng 03',
+            'format_id' => $format->id,
+            'total_seats' => 60,
+            'is_active' => true,
+        ]);
+        $customRoom = Room::create([
+            'cinema_id' => $cinema->id,
+            'room_code' => 'CUSTOM-02',
+            'name' => 'Phòng 02',
+            'format_id' => $format->id,
+            'total_seats' => 60,
+            'is_active' => true,
+        ]);
+        $existingSeat = Seat::create([
+            'room_id' => $customRoom->id,
+            'seat_code' => 'X1',
+            'row_number' => 1,
+            'seat_number' => 1,
+            'seat_type' => 'couple',
+            'is_active' => false,
+        ]);
+
+        (new CinemaSeeder)->run();
+
+        $this->assertSame(60, $emptyRoom->seats()->count());
+        $this->assertDatabaseHas('seats', [
+            'id' => $existingSeat->id,
+            'room_id' => $customRoom->id,
+            'seat_code' => 'X1',
+            'seat_type' => 'couple',
+            'is_active' => false,
+        ]);
+        $this->assertSame(1, $customRoom->seats()->count());
+    }
+
+    public function test_sample_data_seeders_refuse_to_run_in_production(): void
+    {
+        $originalEnvironment = $this->app->environment();
+        $this->app->detectEnvironment(fn () => 'production');
+
+        try {
+            foreach ([new DatabaseSeeder, new MovieSeeder, new CinemaSeeder] as $seeder) {
+                try {
+                    $seeder->run();
+                    $this->fail($seeder::class.' should refuse to seed production data.');
+                } catch (\RuntimeException $exception) {
+                    $this->assertSame(
+                        'Sample data seeding is disabled in production.',
+                        $exception->getMessage()
+                    );
+                }
+            }
+        } finally {
+            $this->app->detectEnvironment(fn () => $originalEnvironment);
         }
     }
 

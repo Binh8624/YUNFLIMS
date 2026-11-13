@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\Cinema;
 use App\Models\Format;
 use App\Models\Movie;
 use App\Models\Room;
@@ -18,6 +19,10 @@ class ShowtimeController extends Controller
     {
         $filters = $request->validate([
             'search' => ['nullable', 'string', 'max:100'],
+            'movie_id' => ['nullable', 'integer', 'exists:movies,id'],
+            'date' => ['nullable', 'date'],
+            'cinema_id' => ['nullable', 'integer', 'exists:cinemas,id'],
+            'room_id' => ['nullable', 'integer', 'exists:rooms,id'],
             'status' => ['nullable', 'in:scheduled,cancelled'],
         ]);
 
@@ -29,12 +34,23 @@ class ShowtimeController extends Controller
                         ->orWhereHas('room', fn ($room) => $room->where('name', 'like', "%{$search}%"));
                 });
             })
+            ->when(! empty($filters['movie_id']), fn ($query) => $query->where('movie_id', $filters['movie_id']))
+            ->when(! empty($filters['date']), fn ($query) => $query->whereDate('starts_at', $filters['date']))
+            ->when(! empty($filters['cinema_id']), fn ($query) => $query->whereHas(
+                'room',
+                fn ($room) => $room->where('cinema_id', $filters['cinema_id'])
+            ))
+            ->when(! empty($filters['room_id']), fn ($query) => $query->where('room_id', $filters['room_id']))
             ->when(! empty($filters['status']), fn ($query) => $query->where('status', $filters['status']))
             ->orderByDesc('starts_at')
             ->paginate(10)
             ->withQueryString();
 
-        return view('admin.showtimes.index', compact('showtimes'));
+        $movies = Movie::orderBy('title')->get(['id', 'title']);
+        $cinemas = Cinema::orderBy('name')->get(['id', 'name']);
+        $rooms = Room::with('cinema')->orderBy('name')->get();
+
+        return view('admin.showtimes.index', compact('showtimes', 'movies', 'cinemas', 'rooms', 'filters'));
     }
 
     public function create()
@@ -84,6 +100,8 @@ class ShowtimeController extends Controller
     {
         $data = $this->validateShowtime($request);
         DB::transaction(function () use ($data, $showtime) {
+            $room = Room::whereKey($data['room_id'])->lockForUpdate()->firstOrFail();
+            $movie = Movie::whereKey($data['movie_id'])->lockForUpdate()->firstOrFail();
             $lockedShowtime = Showtime::whereKey($showtime->id)->lockForUpdate()->firstOrFail();
             if ($lockedShowtime->bookings()->exists()) {
                 throw ValidationException::withMessages([
@@ -91,8 +109,6 @@ class ShowtimeController extends Controller
                 ]);
             }
 
-            $room = Room::whereKey($data['room_id'])->lockForUpdate()->firstOrFail();
-            $movie = Movie::whereKey($data['movie_id'])->lockForUpdate()->firstOrFail();
             $this->ensureFormatCompatibility($data, $movie, $room);
             $this->ensureRoomIsAvailable($data['room_id'], $data['starts_at'], $data['ends_at'], $lockedShowtime->id);
             $lockedShowtime->update($data);
@@ -210,7 +226,8 @@ class ShowtimeController extends Controller
                 $ignoreId,
                 fn ($query) => $query->where('id', '!=', $ignoreId)
             )
-            ->exists();
+            ->lockForUpdate()
+            ->first(['id']) !== null;
 
         if ($conflict) {
             throw ValidationException::withMessages([

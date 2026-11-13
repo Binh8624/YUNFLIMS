@@ -66,14 +66,13 @@ class BookingController extends Controller
         $baseQuery = $this->customerScheduleQuery($filters);
         $showDates = (clone $baseQuery)
             ->where('starts_at', '>=', now())
-            ->where('starts_at', '<', now()->addDays(31)->startOfDay())
             ->selectRaw('DATE(starts_at) as show_date')
             ->distinct()
             ->orderBy('show_date')
             ->pluck('show_date')
             ->map(fn ($showDate) => (string) $showDate)
             ->values();
-        $date = $filters['date'] ?? now()->toDateString();
+        $date = $filters['date'] ?? $showDates->first() ?? now()->toDateString();
         $showtimes = (clone $baseQuery)
             ->with([
                 'movie.format',
@@ -107,6 +106,9 @@ class BookingController extends Controller
         $selectedMovie = ! empty($filters['movie_id'])
             ? Movie::query()->find($filters['movie_id'])
             : null;
+        $hasSelectedMovieShowtimes = $selectedMovie
+            ? $this->customerScheduleQuery(['movie_id' => $selectedMovie->getKey()])->exists()
+            : false;
 
         return view('bookings.index', compact(
             'showtimes',
@@ -117,7 +119,8 @@ class BookingController extends Controller
             'showDates',
             'formats',
             'filters',
-            'selectedMovie'
+            'selectedMovie',
+            'hasSelectedMovieShowtimes'
         ));
     }
 
@@ -482,6 +485,7 @@ class BookingController extends Controller
                     'payment_status' => 'pending',
                     'hold_expires_at' => now()->addMinutes(5),
                     'qr_code' => Booking::generateQrSvg($bookingCode),
+                    'ticket_status' => 'available',
                 ]);
 
                 foreach ($seats as $seat) {
@@ -546,16 +550,27 @@ class BookingController extends Controller
         $cancelled = DB::transaction(function () use ($booking) {
             $lockedBooking = Booking::whereKey($booking->id)->lockForUpdate()->firstOrFail();
 
-            if ($lockedBooking->status !== 'pending') {
-                return false;
+            if ($lockedBooking->status === 'pending') {
+                $lockedBooking->update([
+                    'status' => 'cancelled',
+                    'payment_status' => 'cancelled',
+                    'ticket_status' => 'cancelled',
+                ]);
+
+                return true;
             }
 
-            $lockedBooking->update([
-                'status' => 'cancelled',
-                'payment_status' => 'cancelled',
-            ]);
+            if ($lockedBooking->status === 'confirmed' && $lockedBooking->payment_status === 'paid') {
+                $lockedBooking->update([
+                    'status' => 'cancelled',
+                    'payment_status' => 'refunded',
+                    'ticket_status' => 'cancelled',
+                ]);
 
-            return true;
+                return true;
+            }
+
+            return false;
         });
 
         if (! $cancelled) {
@@ -567,17 +582,88 @@ class BookingController extends Controller
             ->with('success', 'Đã hủy đơn và giải phóng các ghế đang giữ.');
     }
 
-    public function processPayment(Booking $booking)
+    public function processPayment(Request $request, Booking $booking)
     {
         abort_unless($booking->user_id === auth()->id(), 403);
 
-        if ($booking->status !== 'pending') {
-            return redirect()->route('bookings.show', $booking);
+        $processingResult = DB::transaction(function () use ($request, $booking) {
+            $lockedBooking = Booking::whereKey($booking->id)
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            if ($lockedBooking->status !== 'pending') {
+                return ['redirect' => route('bookings.show', $lockedBooking), 'with' => ['success' => 'Giao dịch đã được xử lý trước đó. Vé đã được xác nhận.']];
+            }
+
+            if (! $lockedBooking->hold_expires_at || $lockedBooking->hold_expires_at->isPast()) {
+                $lockedBooking->update([
+                    'status' => 'cancelled',
+                    'payment_status' => 'timeout',
+                ]);
+
+                return ['redirect' => route('bookings.show', $lockedBooking), 'with' => ['errors' => ['payment' => 'Thời gian giữ ghế đã hết. Vui lòng đặt lại ghế.']]];
+            }
+
+            $validated = $request->validate([
+                'payment_result' => ['required', 'in:success,failed,timeout'],
+                'payment_method' => ['nullable', 'string', 'max:50'],
+            ]);
+
+            $paymentMethod = $validated['payment_method'] ?? 'mock_test';
+            $reference = $lockedBooking->payment_reference ?: 'YF-REF-' . strtoupper(\Illuminate\Support\Str::random(12));
+
+            if ($lockedBooking->payment_status === 'paid' && $lockedBooking->status === 'confirmed') {
+                return ['redirect' => route('bookings.show', $lockedBooking), 'with' => ['success' => 'Giao dịch đã được xử lý trước đó. Vé đã được xác nhận.']];
+            }
+
+            switch ($validated['payment_result']) {
+                case 'success':
+                    $lockedBooking->update([
+                        'payment_method' => $paymentMethod,
+                        'payment_reference' => $reference,
+                        'payment_status' => 'paid',
+                        'paid_at' => now(),
+                        'status' => 'confirmed',
+                        'ticket_status' => 'available',
+                    ]);
+
+                    $user = $lockedBooking->user()->first();
+                    if ($user) {
+                        $pointsEarned = max(10, (int) round((float) $lockedBooking->total_amount / 10000));
+                        $user->loyalty_points = ($user->loyalty_points ?? 0) + $pointsEarned;
+                        $user->member_tier = \App\Models\User::resolveMemberTier($user->loyalty_points);
+                        $user->save();
+                    }
+
+                    return ['redirect' => route('bookings.show', $lockedBooking), 'with' => ['success' => 'Thanh toán mô phỏng thành công. Vé đã được xác nhận và điểm tích lũy đã được cập nhật.']];
+                case 'failed':
+                    $lockedBooking->update([
+                        'payment_method' => $paymentMethod,
+                        'payment_reference' => $reference,
+                        'payment_status' => 'failed',
+                        'status' => 'pending',
+                    ]);
+
+                    return ['redirect' => route('bookings.payment', $lockedBooking), 'with' => ['errors' => ['payment' => 'Thanh toán mô phỏng thất bại. Vui lòng thử lại hoặc chọn phương thức khác.']]];
+                case 'timeout':
+                    $lockedBooking->update([
+                        'payment_method' => $paymentMethod,
+                        'payment_reference' => $reference,
+                        'payment_status' => 'timeout',
+                        'status' => 'cancelled',
+                    ]);
+
+                    return ['redirect' => route('bookings.show', $lockedBooking), 'with' => ['errors' => ['payment' => 'Thanh toán mô phỏng hết thời gian. Đơn đã bị hủy và ghế được giải phóng.']]];
+                default:
+                    return ['redirect' => route('bookings.payment', $lockedBooking), 'with' => ['errors' => ['payment' => 'Không thể xử lý thanh toán mô phỏng lúc này.']]];
+            }
+        });
+
+        if (isset($processingResult['with']['errors'])) {
+            return redirect($processingResult['redirect'])->withErrors($processingResult['with']['errors']);
         }
 
-        return back()->withErrors([
-            'payment_method' => 'Thanh toán trực tuyến chưa được tích hợp. Đơn này chưa bị trừ tiền hoặc xác nhận vé.',
-        ]);
+        return redirect($processingResult['redirect'])->with($processingResult['with']);
     }
 
     public function show(Booking $booking)

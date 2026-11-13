@@ -28,9 +28,50 @@
     @if ($errors->any())<div class="alert alert-danger">@foreach ($errors->all() as $error)<div>{{ $error }}</div>@endforeach</div>@endif
 
     <form method="GET" class="row g-2 mb-3">
-        <div class="col-md-5"><input name="search" class="form-control" value="{{ request('search') }}" placeholder="Phim hoặc phòng"></div>
-        <div class="col-md-3"><select name="status" class="form-select"><option value="">Mọi trạng thái</option><option value="scheduled" @selected(request('status') === 'scheduled')>Đã lên lịch</option><option value="cancelled" @selected(request('status') === 'cancelled')>Đã hủy</option></select></div>
-        <div class="col-auto"><button class="btn btn-outline-light">Lọc suất</button></div>
+        <div class="col-12 col-md-4 col-xl-3">
+            <label for="showtime-search" class="visually-hidden">Tìm phim hoặc phòng</label>
+            <input id="showtime-search" name="search" class="form-control" value="{{ $filters['search'] ?? '' }}" placeholder="Phim hoặc phòng">
+        </div>
+        <div class="col-6 col-md-4 col-xl-2">
+            <label for="showtime-movie" class="visually-hidden">Phim</label>
+            <select id="showtime-movie" name="movie_id" class="form-select">
+                <option value="">Mọi phim</option>
+                @foreach ($movies as $movie)
+                    <option value="{{ $movie->id }}" @selected((string) ($filters['movie_id'] ?? '') === (string) $movie->id)>{{ $movie->title }}</option>
+                @endforeach
+            </select>
+        </div>
+        <div class="col-6 col-md-4 col-xl-2">
+            <label for="showtime-date" class="visually-hidden">Ngày chiếu</label>
+            <input id="showtime-date" type="date" name="date" class="form-control" value="{{ $filters['date'] ?? '' }}">
+        </div>
+        <div class="col-6 col-md-4 col-xl-2">
+            <label for="showtime-cinema" class="visually-hidden">Rạp</label>
+            <select id="showtime-cinema" name="cinema_id" class="form-select">
+                <option value="">Mọi rạp</option>
+                @foreach ($cinemas as $cinema)
+                    <option value="{{ $cinema->id }}" @selected((string) ($filters['cinema_id'] ?? '') === (string) $cinema->id)>{{ $cinema->name }}</option>
+                @endforeach
+            </select>
+        </div>
+        <div class="col-6 col-md-4 col-xl-2">
+            <label for="showtime-room" class="visually-hidden">Phòng</label>
+            <select id="showtime-room" name="room_id" class="form-select">
+                <option value="">Mọi phòng</option>
+                @foreach ($rooms as $room)
+                    <option value="{{ $room->id }}" @selected((string) ($filters['room_id'] ?? '') === (string) $room->id)>{{ $room->cinema->name }} · {{ $room->name }}</option>
+                @endforeach
+            </select>
+        </div>
+        <div class="col-6 col-md-4 col-xl-1">
+            <label for="showtime-status" class="visually-hidden">Trạng thái</label>
+            <select id="showtime-status" name="status" class="form-select">
+                <option value="">Mọi trạng thái</option>
+                <option value="scheduled" @selected(($filters['status'] ?? '') === 'scheduled')>Đã lên lịch</option>
+                <option value="cancelled" @selected(($filters['status'] ?? '') === 'cancelled')>Đã hủy</option>
+            </select>
+        </div>
+        <div class="col-12 col-xl-auto"><button class="btn btn-outline-light w-100">Lọc suất</button></div>
     </form>
 
     <div class="table-responsive">

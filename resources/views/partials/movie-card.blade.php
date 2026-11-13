@@ -1,9 +1,19 @@
 <article class="movie-card h-100">
-    <a href="{{ route('movies.show', $movie) }}" class="movie-poster-link text-decoration-none" aria-label="Xem thông tin phim {{ $movie->title }}">
-        <img src="{{ $movie->poster ?? 'https://placehold.co/600x900/1b1b22/e50914?text=YUNFLIMS' }}" alt="{{ $movie->title }}" class="movie-poster" loading="lazy">
-        <span class="badge badge-red">{{ $movie->label ?? ($movie->status === 'coming_soon' ? 'SẮP CHIẾU' : 'ĐANG CHIẾU') }}</span>
-        <span class="movie-age" title="{{ $movie->age_rating_verified ? 'Phân loại đã xác minh' : 'Phân loại đang chờ xác minh' }}">{{ $movie->ageRatingLabel() }}</span>
-    </a>
+    <div class="position-relative">
+        <a href="{{ route('movies.show', $movie) }}" class="movie-poster-link text-decoration-none" aria-label="Xem thông tin phim {{ $movie->title }}">
+            <img src="{{ $movie->poster ?? 'https://placehold.co/600x900/1b1b22/e50914?text=YUNFLIMS' }}" alt="{{ $movie->title }}" class="movie-poster" loading="lazy">
+            <span class="badge badge-red">{{ $movie->label ?? ($movie->status === 'coming_soon' ? 'SẮP CHIẾU' : 'ĐANG CHIẾU') }}</span>
+            <span class="movie-age" title="{{ $movie->age_rating_verified ? 'Phân loại đã xác minh' : 'Phân loại đang chờ xác minh' }}">{{ $movie->ageRatingLabel() }}</span>
+        </a>
+        @auth
+            <form method="POST" action="{{ route('movies.favorite', $movie) }}" class="position-absolute top-0 end-0 p-2">
+                @csrf
+                <button type="submit" class="btn btn-sm rounded-circle {{ auth()->user()->isFavoriteMovie($movie) ? 'btn-light text-danger' : 'btn-dark border border-light text-light' }}" aria-label="{{ auth()->user()->isFavoriteMovie($movie) ? 'Bỏ thích phim' : 'Thêm phim yêu thích' }}">
+                    <i class="bi {{ auth()->user()->isFavoriteMovie($movie) ? 'bi-heart-fill' : 'bi-heart' }}"></i>
+                </button>
+            </form>
+        @endauth
+    </div>
 
     <div class="movie-info">
         <h3 class="movie-title">

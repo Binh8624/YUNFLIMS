@@ -48,29 +48,42 @@ class UserController extends Controller
 
     public function updateRole(Request $request, User $user)
     {
-        $data = $request->validate(['role' => ['required', 'in:customer,admin']]);
+        $data = $request->validate([
+            'role' => ['required', 'in:'.implode(',', User::allowedRoleValues())],
+        ]);
 
-        if ($request->user()->is($user) && $data['role'] !== 'admin') {
+        $role = User::normalizeRole($data['role']);
+
+        if ($request->user()->is($user) && $role !== User::ROLE_SUPER_ADMIN) {
             throw ValidationException::withMessages([
-                'role' => 'Không thể tự hạ quyền admin của tài khoản đang đăng nhập.',
+                'role' => 'Không thể tự hạ quyền Super Admin của tài khoản đang đăng nhập.',
             ]);
         }
 
-        DB::transaction(function () use ($user, $data) {
+        DB::transaction(function () use ($user, $role) {
             $lockedUser = User::whereKey($user->id)->lockForUpdate()->firstOrFail();
 
+            $normalizedCurrentRole = User::normalizeRole($lockedUser->role);
+
             if (
-                $lockedUser->role === 'admin'
+                in_array($normalizedCurrentRole, [User::ROLE_SUPER_ADMIN, User::ROLE_BRANCH_MANAGER, User::ROLE_TICKET_SELLER, User::ROLE_TICKET_CHECKER, User::ROLE_CONTENT_STAFF], true)
                 && $lockedUser->is_active
-                && $data['role'] !== 'admin'
-                && User::where('role', 'admin')->where('is_active', true)->lockForUpdate()->count() <= 1
+                && $role !== User::ROLE_SUPER_ADMIN
+                && User::whereIn('role', [
+                    User::ROLE_SUPER_ADMIN,
+                    User::ROLE_BRANCH_MANAGER,
+                    User::ROLE_TICKET_SELLER,
+                    User::ROLE_TICKET_CHECKER,
+                    User::ROLE_CONTENT_STAFF,
+                    User::ROLE_ADMIN,
+                ])->where('is_active', true)->lockForUpdate()->count() <= 1
             ) {
                 throw ValidationException::withMessages([
-                    'role' => 'Không thể hạ quyền admin cuối cùng đang hoạt động.',
+                    'role' => 'Không thể hạ quyền quản trị cuối cùng đang hoạt động.',
                 ]);
             }
 
-            $lockedUser->update($data);
+            $lockedUser->update(['role' => $role]);
         });
 
         return back()->with('success', 'Đã cập nhật quyền người dùng.');
@@ -80,22 +93,31 @@ class UserController extends Controller
     {
         if ($request->user()->is($user)) {
             throw ValidationException::withMessages([
-                'user' => 'Không thể khóa tài khoản admin đang đăng nhập.',
+                'user' => 'Không thể khóa tài khoản quản trị đang đăng nhập.',
             ]);
         }
 
         DB::transaction(function () use ($user) {
             $lockedUser = User::whereKey($user->id)->lockForUpdate()->firstOrFail();
 
-            if ($lockedUser->role === 'admin' && $lockedUser->is_active) {
-                $activeAdmins = User::where('role', 'admin')
+            $normalizedRole = User::normalizeRole($lockedUser->role);
+
+            if (in_array($normalizedRole, [User::ROLE_SUPER_ADMIN, User::ROLE_BRANCH_MANAGER, User::ROLE_TICKET_SELLER, User::ROLE_TICKET_CHECKER, User::ROLE_CONTENT_STAFF], true) && $lockedUser->is_active) {
+                $activeAdmins = User::whereIn('role', [
+                    User::ROLE_SUPER_ADMIN,
+                    User::ROLE_BRANCH_MANAGER,
+                    User::ROLE_TICKET_SELLER,
+                    User::ROLE_TICKET_CHECKER,
+                    User::ROLE_CONTENT_STAFF,
+                    User::ROLE_ADMIN,
+                ])
                     ->where('is_active', true)
                     ->lockForUpdate()
                     ->count();
 
                 if ($activeAdmins <= 1) {
                     throw ValidationException::withMessages([
-                        'user' => 'Không thể khóa admin cuối cùng đang hoạt động.',
+                        'user' => 'Không thể khóa người quản trị cuối cùng đang hoạt động.',
                     ]);
                 }
             }

@@ -21,6 +21,7 @@
                     <nav class="nav flex-column gap-2">
                         <a href="{{ route('profile') }}" class="btn btn-red text-start">Thông tin cá nhân</a>
                         <a href="{{ route('bookings.history') }}" class="btn btn-outline-light text-start">Lịch sử đặt vé</a>
+                        <a href="{{ route('favorites.index') }}" class="btn btn-outline-light text-start">Phim yêu thích</a>
                     </nav>
                 </div>
             </div>
@@ -30,6 +31,21 @@
             <div class="card bg-dark border-secondary mb-4 cinema-panel">
                 <div class="card-body p-4">
                     <h3 class="mb-3">Thông tin cá nhân</h3>
+
+                    <div class="row g-3 mb-4">
+                        <div class="col-md-6">
+                            <div class="border border-secondary rounded p-3 h-100">
+                                <div class="text-secondary small text-uppercase">Hạng thành viên</div>
+                                <div class="fs-5 fw-bold mt-2">{{ $user->memberTierLabel() }}</div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="border border-secondary rounded p-3 h-100">
+                                <div class="text-secondary small text-uppercase">Điểm tích lũy</div>
+                                <div class="fs-5 fw-bold mt-2">{{ number_format($user->loyalty_points ?? 0) }} điểm</div>
+                            </div>
+                        </div>
+                    </div>
 
                     @if ($errors->any())
                         <div class="alert alert-danger" role="alert">
@@ -57,6 +73,35 @@
 
                         <button type="submit" class="btn btn-red mt-4">Lưu thay đổi</button>
                     </form>
+                </div>
+            </div>
+
+            <div class="card bg-dark border-secondary mb-4 cinema-panel">
+                <div class="card-body p-4">
+                    <div class="d-flex justify-content-between align-items-center gap-3 mb-3">
+                        <h3 class="mb-0">Phim yêu thích</h3>
+                        <a href="{{ route('favorites.index') }}" class="btn btn-outline-light btn-sm">Xem tất cả</a>
+                    </div>
+
+                    @if ($favorites->isEmpty())
+                        <p class="text-secondary mb-0">Bạn chưa lưu phim nào vào danh sách yêu thích.</p>
+                    @else
+                        <div class="row g-3">
+                            @foreach ($favorites as $favorite)
+                                <div class="col-md-6 col-xl-4">
+                                    <div class="border border-secondary rounded overflow-hidden h-100">
+                                        <a href="{{ route('movies.show', $favorite) }}" class="d-block text-decoration-none">
+                                            <img src="{{ $favorite->poster ?? 'https://placehold.co/600x900/1b1b22/e50914?text=YUNFLIMS' }}" alt="{{ $favorite->title }}" class="img-fluid" style="aspect-ratio: 2 / 3; object-fit: cover; width: 100%;">
+                                        </a>
+                                        <div class="p-3">
+                                            <h5 class="mb-2"><a href="{{ route('movies.show', $favorite) }}" class="text-white text-decoration-none">{{ $favorite->title }}</a></h5>
+                                            <div class="small text-secondary">{{ $favorite->format?->name ?? 'Định dạng chưa cập nhật' }}</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            @endforeach
+                        </div>
+                    @endif
                 </div>
             </div>
 

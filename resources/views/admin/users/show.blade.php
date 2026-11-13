@@ -21,7 +21,7 @@
         <div class="col-md-4">
             <article class="admin-stat-card">
                 <div class="admin-stat-top"><span>Vai trò hiện tại</span><span class="admin-stat-icon"><i class="bi bi-person-badge" aria-hidden="true"></i></span></div>
-                <strong class="admin-stat-value">{{ $user->role === 'admin' ? 'Admin' : 'Khách hàng' }}</strong>
+                <strong class="admin-stat-value">{{ $user->role_label }}</strong>
                 <div class="admin-stat-note">Phân quyền theo cấu hình hiện có</div>
             </article>
         </div>

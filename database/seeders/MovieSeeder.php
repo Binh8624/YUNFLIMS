@@ -12,6 +12,10 @@ class MovieSeeder extends Seeder
 {
     public function run(): void
     {
+        if (app()->environment('production')) {
+            throw new \RuntimeException('Sample data seeding is disabled in production.');
+        }
+
         $movies = [
             [
                 'title' => 'Avengers: Endgame',

@@ -153,8 +153,13 @@
     @empty
         <div class="cinema-panel p-4 p-md-5 text-center">
             <i class="bi bi-calendar-x feature-icon" aria-hidden="true"></i>
-            <h2 class="h4 mt-3">Chưa có suất chiếu phù hợp</h2>
-            <p class="text-secondary mb-3">Không có lịch chiếu thực tế khớp với các bộ lọc đã chọn. Hãy thử ngày hoặc rạp khác.</p>
+            @if ($selectedMovie && ! $hasSelectedMovieShowtimes)
+                <h2 class="h4 mt-3">Hiện chưa có lịch chiếu cho bộ phim này. Vui lòng quay lại sau.</h2>
+                <p class="text-secondary mb-3">Bạn có thể xem lịch chiếu của các phim khác trong hệ thống.</p>
+            @else
+                <h2 class="h4 mt-3">Chưa có suất chiếu phù hợp</h2>
+                <p class="text-secondary mb-3">Không có lịch chiếu thực tế khớp với các bộ lọc đã chọn. Hãy thử ngày hoặc rạp khác.</p>
+            @endif
             <a href="{{ route('showtimes.index') }}" class="btn btn-outline-light">Xóa bộ lọc</a>
         </div>
     @endforelse

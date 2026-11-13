@@ -14,7 +14,7 @@ class AdminMiddleware
             return redirect()->route('login');
         }
 
-        if ($request->user()->role !== 'admin') {
+        if (! $request->user()->isAdminStaff()) {
             abort(403, 'Bạn không có quyền truy cập trang quản trị.');
         }
 

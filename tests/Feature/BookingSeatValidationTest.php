@@ -205,14 +205,23 @@ class BookingSeatValidationTest extends TestCase
         $this->assertSame('80000.00', $booking->bookingSeats()->firstOrFail()->price);
 
         $this->from(route('bookings.payment', $booking))
-            ->post(route('bookings.payment.process', $booking))
-            ->assertRedirect(route('bookings.payment', $booking))
-            ->assertSessionHasErrors('payment_method');
+            ->post(route('bookings.payment.process', $booking), [
+                'payment_result' => 'success',
+                'payment_method' => 'mock_test',
+            ])
+            ->assertRedirect(route('bookings.show', $booking))
+            ->assertSessionHas('success');
 
+        $booking->refresh();
+
+        $this->assertSame('confirmed', $booking->status);
+        $this->assertSame('paid', $booking->payment_status);
+        $this->assertSame('mock_test', $booking->payment_method);
+        $this->assertSame('available', $booking->ticket_status);
         $this->assertDatabaseHas('bookings', [
             'id' => $booking->id,
-            'status' => 'pending',
-            'payment_status' => 'pending',
+            'status' => 'confirmed',
+            'payment_status' => 'paid',
             'total_amount' => 80000,
         ]);
     }

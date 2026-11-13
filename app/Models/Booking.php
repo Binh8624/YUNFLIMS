@@ -23,6 +23,9 @@ class Booking extends Model
         'paid_at',
         'qr_code',
         'hold_expires_at',
+        'ticket_status',
+        'ticket_used_at',
+        'checkin_count',
     ];
 
     protected function casts(): array
@@ -31,6 +34,7 @@ class Booking extends Model
             'total_amount' => 'decimal:2',
             'paid_at' => 'datetime',
             'hold_expires_at' => 'datetime',
+            'ticket_used_at' => 'datetime',
         ];
     }
 

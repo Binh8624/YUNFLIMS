@@ -46,6 +46,15 @@
                         <i class="bi bi-play-circle"></i> Xem trailer
                     </a>
                 @endif
+                @auth
+                    <form method="POST" action="{{ route('movies.favorite', $movie) }}">
+                        @csrf
+                        <button type="submit" class="btn btn-outline-light btn-lg">
+                            <i class="bi {{ auth()->user()->isFavoriteMovie($movie) ? 'bi-heart-fill text-danger' : 'bi-heart' }} me-2"></i>
+                            {{ auth()->user()->isFavoriteMovie($movie) ? 'Đã yêu thích' : 'Yêu thích' }}
+                        </button>
+                    </form>
+                @endauth
                 <button type="button" class="btn btn-outline-light btn-lg" id="share-movie" data-share-title="{{ $movie->title }}" data-share-url="{{ request()->url() }}">
                     <i class="bi bi-share me-2" aria-hidden="true"></i>Chia sẻ phim
                 </button>

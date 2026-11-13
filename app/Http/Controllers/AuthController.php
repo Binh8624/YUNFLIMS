@@ -28,6 +28,8 @@ class AuthController extends Controller
             'email' => $validated['email'],
             'password' => Hash::make($validated['password']),
             'role' => 'customer',
+            'member_tier' => 'new',
+            'loyalty_points' => 0,
         ]);
 
         Auth::login($user);
@@ -60,7 +62,7 @@ class AuthController extends Controller
 
             $request->session()->regenerate();
 
-            if (Auth::user()->role === 'admin') {
+            if (Auth::user()->isAdminStaff()) {
                 AdminActivityLog::create([
                     'actor_id' => Auth::id(),
                     'action' => 'admin.auth.login',
@@ -68,7 +70,7 @@ class AuthController extends Controller
                     'response_status' => 302,
                 ]);
 
-                return redirect()->intended(route('admin.movies.index'));
+                return redirect()->intended(route('admin.dashboard'));
             }
 
             return redirect()->intended(route('home'));
@@ -84,8 +86,9 @@ class AuthController extends Controller
     public function profile()
     {
         $user = Auth::user();
+        $favorites = $user->favoriteMovies()->with('format')->latest('movie_favorites.created_at')->limit(6)->get();
 
-        return view('auth.profile', compact('user'));
+        return view('auth.profile', compact('user', 'favorites'));
     }
 
     public function updateProfile(Request $request)
@@ -120,7 +123,7 @@ class AuthController extends Controller
 
     public function logout(Request $request)
     {
-        if ($request->user()?->role === 'admin') {
+        if ($request->user()?->isAdminStaff()) {
             AdminActivityLog::create([
                 'actor_id' => $request->user()->getKey(),
                 'action' => 'admin.auth.logout',

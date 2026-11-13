@@ -27,13 +27,13 @@ Website đặt vé xem phim Laravel 12 sử dụng Blade và Bootstrap. Hệ th�
    ```bash
    php artisan migrate
    ```
-   Lệnh này chỉ áp dụng migration còn thiếu, không xóa dữ liệu. Không dùng `migrate:fresh` hoặc `db:wipe` trên dữ liệu cần giữ. Chỉ chạy `php artisan db:seed` ở môi trường local khi thực sự muốn dữ liệu mẫu; seeder tạo tài khoản mẫu và không nên chạy lặp trên production.
+   Lệnh này chỉ áp dụng migration còn thiếu, không xóa dữ liệu. Không dùng `migrate:fresh` hoặc `db:wipe` trên dữ liệu cần giữ. Chỉ chạy `php artisan db:seed` ở môi trường local khi thực sự muốn dữ liệu mẫu; các seeder mẫu từ chối chạy ở production.
    Migration định dạng thêm trường định dạng duy nhất cho phim và phòng, ưu tiên định dạng đang dùng nhiều nhất trong lịch chiếu hiện có rồi đến cấu hình cũ; dữ liệu ghế, lịch chiếu và vé không bị xóa. Migration bổ sung metadata phim đặt phân loại tuổi cũ ở trạng thái chưa xác minh và thêm cờ phim nổi bật, không tạo hoặc thay đổi phim/lịch chiếu.
 5. Để bổ sung năm phòng mẫu cùng sơ đồ 60 ghế mà không tạo trùng, chạy:
    ```bash
    php artisan db:seed --class="Database\Seeders\CinemaSeeder"
    ```
-   Seeder giữ nguyên phòng và ghế đang có; định dạng năm phòng mới được chia thành 2D, 3D và IMAX.
+   Seeder giữ nguyên phòng và sơ đồ ghế đã có; nếu một phòng mẫu đã tồn tại nhưng chưa có ghế, seeder bổ sung sơ đồ 60 ghế. Năm phòng mới được chia thành 2D, 3D và IMAX. Lệnh từ chối chạy ở production.
 6. Chạy local server:
    ```bash
    php artisan serve
@@ -57,8 +57,8 @@ Website đặt vé xem phim Laravel 12 sử dụng Blade và Bootstrap. Hệ th�
 - QR SVG tiêu chuẩn chứa liên kết xác minh vé; trang quét chỉ xác nhận đơn đã thanh toán, không hiển thị thông tin người mua
 - Hồ sơ cá nhân và đổi mật khẩu
 - Lịch sử đặt vé cho người dùng
-- Dashboard admin, CRUD và tìm kiếm/phân trang cho phim, rạp, phòng, ghế, suất chiếu, định dạng, quy tắc giá, đánh giá, đơn vé, thanh toán và người dùng
-- Tạo lịch tự động có xem trước, kiểm tra tương thích định dạng và khoảng vệ sinh 15 phút
+- Dashboard admin, CRUD và tìm kiếm/phân trang cho phim, rạp, phòng, ghế, suất chiếu, định dạng, quy tắc giá, đánh giá, đơn vé, thanh toán và người dùng; lịch chiếu có thể lọc theo phim, ngày, rạp và phòng
+- Tạo lịch hàng loạt có xem trước; hỗ trợ giữ cách chọn phòng thủ công hoặc tự động gán tối đa một phòng tương thích còn trống cho mỗi ngày/khung giờ. Hệ thống kiểm tra xung đột và khoảng nghỉ 15 phút, rồi tính lại trong transaction trước khi lưu
 - Lệnh `showtimes:generate-test` tạo lịch thử nghiệm best-effort trong 7 ngày, chỉ dùng rạp/phòng đang hoạt động có định dạng tương thích; lệnh giữ nguyên lịch cũ, tránh trùng lặp, ghi log các lần bỏ qua và từ chối chạy trên production
 - Mỗi phim và phòng có một định dạng cố định: 2D, 3D hoặc IMAX; lịch chiếu và đặt vé chỉ chấp nhận định dạng trùng khớp
 - Phim nổi bật lấy từ đặt vé đã xác nhận/đánh giá thực tế; khi chưa có thống kê, quản trị viên có thể chọn phim nổi bật trong form phim. Không tự tạo chỉ số phổ biến.

@@ -12,6 +12,10 @@ class CinemaSeeder extends Seeder
 {
     public function run(): void
     {
+        if (app()->environment('production')) {
+            throw new \RuntimeException('Sample data seeding is disabled in production.');
+        }
+
         $cinema = Cinema::firstOrCreate(
             ['name' => 'YUNFLIMS Hà Nội'],
             [
@@ -37,9 +41,7 @@ class CinemaSeeder extends Seeder
         if ($room->room_code === null) {
             $room->update(['room_code' => 'R'.$room->id]);
         }
-
         $room->formats()->sync([(int) $room->format_id]);
-
         $this->createSeatMap($room);
 
         foreach ([
@@ -67,9 +69,7 @@ class CinemaSeeder extends Seeder
             }
 
             $newRoom->formats()->sync([(int) $newRoom->format_id]);
-            if ($newRoom->wasRecentlyCreated) {
-                $this->createSeatMap($newRoom);
-            }
+            $this->createSeatMap($newRoom);
         }
     }
 

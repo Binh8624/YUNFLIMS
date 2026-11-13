@@ -17,6 +17,7 @@ use App\Http\Controllers\Admin\ShowtimeController;
 use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\BookingController;
+use App\Http\Controllers\FavoriteController;
 use App\Http\Controllers\HomeController;
 use App\Http\Controllers\ReviewController;
 use App\Http\Controllers\ServiceController;
@@ -48,6 +49,10 @@ Route::get('/tickets/{bookingCode}/verify', [TicketVerificationController::class
     ->middleware('throttle:30,1')
     ->name('tickets.verify');
 
+Route::post('/tickets/{bookingCode}/check-in', [TicketVerificationController::class, 'checkIn'])
+    ->middleware(['auth', 'active', 'admin', 'can:check-tickets'])
+    ->name('tickets.checkin');
+
 Route::middleware('guest')->group(function () {
     Route::get('/register', [AuthController::class, 'showRegister'])
         ->name('register');
@@ -73,9 +78,16 @@ Route::post('/movies/{movie}/reviews', [ReviewController::class, 'store'])
     ->middleware(['auth', 'active', 'throttle:10,1'])
     ->name('movies.reviews.store');
 
+Route::post('/movies/{movie}/favorite', [FavoriteController::class, 'toggle'])
+->middleware(['auth', 'active'])
+->name('movies.favorite');
+
 Route::middleware(['auth', 'active'])->group(function () {
-    Route::get('/profile', [AuthController::class, 'profile'])
-        ->name('profile');
+Route::get('/profile', [AuthController::class, 'profile'])
+    ->name('profile');
+
+Route::get('/favorites', [FavoriteController::class, 'index'])
+    ->name('favorites.index');
 
     Route::put('/profile', [AuthController::class, 'updateProfile'])
         ->name('profile.update');
@@ -129,63 +141,80 @@ Route::prefix('admin')
     ->middleware(['auth', 'active', 'admin', 'admin.audit'])
     ->group(function () {
         Route::get('/', [DashboardController::class, 'index'])->name('dashboard');
-        Route::get('/activity-logs', [ActivityLogController::class, 'index'])->name('activity-logs.index');
 
-        Route::get('/showtimes/auto', [ScheduleGeneratorController::class, 'index'])
-            ->name('showtimes.auto');
-        Route::post('/showtimes/auto/preview', [ScheduleGeneratorController::class, 'preview'])
-            ->name('showtimes.auto.preview');
-        Route::post('/showtimes/auto', [ScheduleGeneratorController::class, 'store'])
-            ->name('showtimes.auto.store');
+        Route::middleware('can:access-admin')->group(function () {
+            Route::get('/activity-logs', [ActivityLogController::class, 'index'])->name('activity-logs.index');
+        });
 
-        Route::resource('movies', MovieController::class)
-            ->except(['show']);
+        Route::middleware('can:manage-cinema')->group(function () {
+            Route::get('/showtimes/auto', [ScheduleGeneratorController::class, 'index'])
+                ->name('showtimes.auto');
+            Route::post('/showtimes/auto/preview', [ScheduleGeneratorController::class, 'preview'])
+                ->name('showtimes.auto.preview');
+            Route::post('/showtimes/auto', [ScheduleGeneratorController::class, 'store'])
+                ->name('showtimes.auto.store');
 
-        Route::resource('showtimes', ShowtimeController::class)
-            ->except(['show']);
+            Route::resource('showtimes', ShowtimeController::class)
+                ->except(['show']);
 
-        Route::resource('cinemas', CinemaController::class)->except(['show']);
-        Route::resource('rooms', RoomController::class)->except(['show']);
+            Route::resource('cinemas', CinemaController::class)->except(['show']);
+            Route::resource('rooms', RoomController::class)->except(['show']);
 
-        Route::get('/rooms/{room}/seats', [SeatController::class, 'index'])
-            ->name('rooms.seats.index');
-        Route::post('/rooms/{room}/seats', [SeatController::class, 'store'])
-            ->name('rooms.seats.store');
-        Route::post('/rooms/{room}/seats/rows', [SeatController::class, 'storeRow'])
-            ->name('rooms.seats.rows.store');
-        Route::delete('/rooms/{room}/seats/rows/{rowNumber}', [SeatController::class, 'destroyRow'])
-            ->name('rooms.seats.rows.destroy');
-        Route::post('/rooms/{room}/seats/columns', [SeatController::class, 'storeColumn'])
-            ->name('rooms.seats.columns.store');
-        Route::delete('/rooms/{room}/seats/columns/{seatNumber}', [SeatController::class, 'destroyColumn'])
-            ->name('rooms.seats.columns.destroy');
-        Route::put('/rooms/{room}/seats/{seat}', [SeatController::class, 'update'])
-            ->name('rooms.seats.update');
-        Route::delete('/rooms/{room}/seats/{seat}', [SeatController::class, 'destroy'])
-            ->name('rooms.seats.destroy');
+            Route::get('/rooms/{room}/seats', [SeatController::class, 'index'])
+                ->name('rooms.seats.index');
+            Route::post('/rooms/{room}/seats', [SeatController::class, 'store'])
+                ->name('rooms.seats.store');
+            Route::post('/rooms/{room}/seats/rows', [SeatController::class, 'storeRow'])
+                ->name('rooms.seats.rows.store');
+            Route::delete('/rooms/{room}/seats/rows/{rowNumber}', [SeatController::class, 'destroyRow'])
+                ->name('rooms.seats.rows.destroy');
+            Route::post('/rooms/{room}/seats/columns', [SeatController::class, 'storeColumn'])
+                ->name('rooms.seats.columns.store');
+            Route::delete('/rooms/{room}/seats/columns/{seatNumber}', [SeatController::class, 'destroyColumn'])
+                ->name('rooms.seats.columns.destroy');
+            Route::put('/rooms/{room}/seats/{seat}', [SeatController::class, 'update'])
+                ->name('rooms.seats.update');
+            Route::delete('/rooms/{room}/seats/{seat}', [SeatController::class, 'destroy'])
+                ->name('rooms.seats.destroy');
+        });
 
-        Route::get('/bookings', [AdminBookingController::class, 'index'])->name('bookings.index');
-        Route::get('/bookings/{booking}', [AdminBookingController::class, 'show'])->name('bookings.show');
-        Route::patch('/bookings/{booking}/cancel', [AdminBookingController::class, 'cancel'])->name('bookings.cancel');
+        Route::middleware('can:manage-bookings')->group(function () {
+            Route::get('/bookings', [AdminBookingController::class, 'index'])->name('bookings.index');
+            Route::get('/bookings/{booking}', [AdminBookingController::class, 'show'])->name('bookings.show');
+            Route::patch('/bookings/{booking}/cancel', [AdminBookingController::class, 'cancel'])->name('bookings.cancel');
+        });
 
-        Route::get('/payments', [PaymentController::class, 'index'])->name('payments.index');
-        Route::get('/reports', [ReportController::class, 'index'])->name('reports.index');
-        Route::get('/reports/export', [ReportController::class, 'export'])->name('reports.export');
-        Route::get('/reviews', [AdminReviewController::class, 'index'])->name('reviews.index');
-        Route::delete('/reviews/{review}', [AdminReviewController::class, 'destroy'])->name('reviews.destroy');
+        Route::middleware('can:manage-payments')->group(function () {
+            Route::get('/payments', [PaymentController::class, 'index'])->name('payments.index');
+        });
 
-        Route::get('/formats', [FormatController::class, 'index'])->name('formats.index');
-        Route::post('/formats', [FormatController::class, 'store'])->name('formats.store');
-        Route::put('/formats/{format}', [FormatController::class, 'update'])->name('formats.update');
-        Route::delete('/formats/{format}', [FormatController::class, 'destroy'])->name('formats.destroy');
+        Route::middleware('can:manage-reports')->group(function () {
+            Route::get('/reports', [ReportController::class, 'index'])->name('reports.index');
+            Route::get('/reports/export', [ReportController::class, 'export'])->name('reports.export');
+        });
 
-        Route::get('/pricing', [PricingRuleController::class, 'index'])->name('pricing.index');
-        Route::post('/pricing', [PricingRuleController::class, 'store'])->name('pricing.store');
-        Route::put('/pricing/{pricingRule}', [PricingRuleController::class, 'update'])->name('pricing.update');
-        Route::delete('/pricing/{pricingRule}', [PricingRuleController::class, 'destroy'])->name('pricing.destroy');
+        Route::middleware('can:manage-content')->group(function () {
+            Route::resource('movies', MovieController::class)
+                ->except(['show']);
 
-        Route::get('/users', [UserController::class, 'index'])->name('users.index');
-        Route::get('/users/{user}', [UserController::class, 'show'])->name('users.show');
-        Route::patch('/users/{user}/role', [UserController::class, 'updateRole'])->name('users.role');
-        Route::patch('/users/{user}/active', [UserController::class, 'toggleActive'])->name('users.active');
+            Route::get('/reviews', [AdminReviewController::class, 'index'])->name('reviews.index');
+            Route::delete('/reviews/{review}', [AdminReviewController::class, 'destroy'])->name('reviews.destroy');
+
+            Route::get('/formats', [FormatController::class, 'index'])->name('formats.index');
+            Route::post('/formats', [FormatController::class, 'store'])->name('formats.store');
+            Route::put('/formats/{format}', [FormatController::class, 'update'])->name('formats.update');
+            Route::delete('/formats/{format}', [FormatController::class, 'destroy'])->name('formats.destroy');
+
+            Route::get('/pricing', [PricingRuleController::class, 'index'])->name('pricing.index');
+            Route::post('/pricing', [PricingRuleController::class, 'store'])->name('pricing.store');
+            Route::put('/pricing/{pricingRule}', [PricingRuleController::class, 'update'])->name('pricing.update');
+            Route::delete('/pricing/{pricingRule}', [PricingRuleController::class, 'destroy'])->name('pricing.destroy');
+        });
+
+        Route::middleware('can:manage-users')->group(function () {
+            Route::get('/users', [UserController::class, 'index'])->name('users.index');
+            Route::get('/users/{user}', [UserController::class, 'show'])->name('users.show');
+            Route::patch('/users/{user}/role', [UserController::class, 'updateRole'])->name('users.role');
+            Route::patch('/users/{user}/active', [UserController::class, 'toggleActive'])->name('users.active');
+        });
     });

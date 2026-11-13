@@ -374,7 +374,7 @@
 </head>
 <body class="{{ request()->is('admin*') ? 'admin-pro-body' : '' }}">
 
-@if (request()->is('admin*') && auth()->check() && auth()->user()->role === 'admin')
+@if (request()->is('admin*') && auth()->check() && auth()->user()->isAdminStaff())
     <header class="admin-pro-topbar">
         <button class="admin-pro-menu-toggle" type="button" data-admin-sidebar-toggle aria-controls="adminProSidebar" aria-expanded="false" aria-label="Mở điều hướng quản trị">
             <i class="bi bi-list" aria-hidden="true"></i>
@@ -448,8 +448,9 @@
                         </button>
                         <ul class="dropdown-menu dropdown-menu-end dropdown-menu-dark" aria-labelledby="accountMenu">
                             <li><a class="dropdown-item" href="{{ route('profile') }}"><i class="bi bi-person me-2"></i>Hồ sơ cá nhân</a></li>
+                            <li><a class="dropdown-item" href="{{ route('favorites.index') }}"><i class="bi bi-heart me-2"></i>Phim yêu thích</a></li>
                             <li><a class="dropdown-item" href="{{ route('bookings.history') }}"><i class="bi bi-ticket-perforated me-2"></i>Lịch sử đặt vé</a></li>
-                            @if (Auth::user()->role === 'admin')
+                            @if (Auth::user()->isAdminStaff())
                                 <li><hr class="dropdown-divider"></li>
                                 <li><a class="dropdown-item" href="{{ route('admin.dashboard') }}"><i class="bi bi-speedometer2 me-2"></i>Quản trị</a></li>
                             @endif
@@ -477,7 +478,7 @@
 @endif
 
 <main>
-    @if (request()->is('admin*') && auth()->check() && auth()->user()->role === 'admin')
+    @if (request()->is('admin*') && auth()->check() && auth()->user()->isAdminStaff())
         <div class="admin-pro-shell">
             <button class="admin-pro-backdrop" type="button" data-admin-sidebar-toggle aria-label="Đóng điều hướng quản trị"></button>
             <aside class="admin-pro-sidebar" id="adminProSidebar" aria-label="Điều hướng quản trị">
@@ -525,7 +526,7 @@
     @endif
 </main>
 
-@unless (request()->is('admin*') && auth()->check() && auth()->user()->role === 'admin')
+@unless (request()->is('admin*') && auth()->check() && auth()->user()->isAdminStaff())
 <footer class="py-4">
     <div class="container">
         <div class="row g-4">
