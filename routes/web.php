@@ -79,15 +79,15 @@ Route::post('/movies/{movie}/reviews', [ReviewController::class, 'store'])
     ->name('movies.reviews.store');
 
 Route::post('/movies/{movie}/favorite', [FavoriteController::class, 'toggle'])
-->middleware(['auth', 'active'])
-->name('movies.favorite');
+    ->middleware(['auth', 'active'])
+    ->name('movies.favorite');
 
 Route::middleware(['auth', 'active'])->group(function () {
-Route::get('/profile', [AuthController::class, 'profile'])
-    ->name('profile');
+    Route::get('/profile', [AuthController::class, 'profile'])
+        ->name('profile');
 
-Route::get('/favorites', [FavoriteController::class, 'index'])
-    ->name('favorites.index');
+    Route::get('/favorites', [FavoriteController::class, 'index'])
+        ->name('favorites.index');
 
     Route::put('/profile', [AuthController::class, 'updateProfile'])
         ->name('profile.update');

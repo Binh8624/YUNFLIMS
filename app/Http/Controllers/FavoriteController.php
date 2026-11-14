@@ -3,7 +3,9 @@
 namespace App\Http\Controllers;
 
 use App\Models\Movie;
+use App\Models\User;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class FavoriteController extends Controller
 {
@@ -23,16 +25,28 @@ class FavoriteController extends Controller
 
     public function toggle(Request $request, Movie $movie)
     {
-        $user = $request->user();
+        $isFavorite = DB::transaction(function () use ($request, $movie) {
+            $user = User::query()
+                ->whereKey($request->user()->getKey())
+                ->lockForUpdate()
+                ->firstOrFail();
 
-        if ($user->isFavoriteMovie($movie)) {
-            $user->favoriteMovies()->detach($movie);
+            if ($user->isFavoriteMovie($movie)) {
+                $user->favoriteMovies()->detach($movie);
 
-            return back()->with('success', 'Đã xóa phim khỏi danh sách yêu thích.');
-        }
+                return false;
+            }
 
-        $user->favoriteMovies()->syncWithoutDetaching([$movie->id]);
+            $user->favoriteMovies()->syncWithoutDetaching([$movie->getKey()]);
 
-        return back()->with('success', 'Đã thêm phim vào danh sách yêu thích.');
+            return true;
+        });
+
+        return back()->with(
+            'success',
+            $isFavorite
+                ? 'Đã thêm phim vào danh sách yêu thích.'
+                : 'Đã xóa phim khỏi danh sách yêu thích.'
+        );
     }
 }

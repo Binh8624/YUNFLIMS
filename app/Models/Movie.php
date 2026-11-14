@@ -8,7 +8,6 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasManyThrough;
-use Illuminate\Support\Facades\Schema;
 
 class Movie extends Model
 {
@@ -84,18 +83,12 @@ class Movie extends Model
 
     public function favoritedBy(): BelongsToMany
     {
-        if (! Schema::hasTable('movie_favorites')) {
-            return $this->belongsToMany(User::class, 'movie_favorites')
-                ->whereRaw('1 = 0')
-                ->withTimestamps();
-        }
-
         return $this->belongsToMany(User::class, 'movie_favorites')->withTimestamps();
     }
 
     public function isFavoritedBy(?User $user): bool
     {
-        if (! $user || ! Schema::hasTable('movie_favorites')) {
+        if (! $user) {
             return false;
         }
 

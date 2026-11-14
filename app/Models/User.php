@@ -9,7 +9,6 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
-use Illuminate\Support\Facades\Schema;
 
 class User extends Authenticatable
 {
@@ -195,21 +194,11 @@ class User extends Authenticatable
 
     public function favoriteMovies(): BelongsToMany
     {
-        if (! Schema::hasTable('movie_favorites')) {
-            return $this->belongsToMany(Movie::class, 'movie_favorites')
-                ->whereRaw('1 = 0')
-                ->withTimestamps();
-        }
-
         return $this->belongsToMany(Movie::class, 'movie_favorites')->withTimestamps();
     }
 
     public function isFavoriteMovie(Movie $movie): bool
     {
-        if (! Schema::hasTable('movie_favorites')) {
-            return false;
-        }
-
         return $this->favoriteMovies()->whereKey($movie->getKey())->exists();
     }
 }
