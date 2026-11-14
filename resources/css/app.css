@@ -26,7 +26,7 @@ body {
         radial-gradient(ellipse at 50% -18rem, rgb(229 9 20 / 10%), transparent 58rem),
         var(--ys-bg);
     color: var(--ys-text);
-    font-family: Inter, "Segoe UI", Arial, sans-serif;
+    font-family: "Be Vietnam Pro", "Segoe UI", system-ui, sans-serif;
     line-height: 1.6;
     -webkit-font-smoothing: antialiased;
 }
@@ -2976,4 +2976,46 @@ footer a:hover {
     .home-promo-copy {
         min-width: 100%;
     }
+}
+
+/* ===== Typography: Oswald (display) + Be Vietnam Pro (text) ===== */
+h1, h2, h3, h4, h5, h6,
+.brand,
+.navbar .brand,
+.section-title,
+.hero-content h1,
+.movie-title,
+.home-movie-title,
+.seat-screen-logo {
+    font-family: "Oswald", "Be Vietnam Pro", "Segoe UI", sans-serif;
+    font-weight: 600;
+    letter-spacing: .01em;
+}
+
+.hero-content h1 {
+    font-weight: 600;
+    letter-spacing: .015em;
+    line-height: 1.1;
+}
+
+.section-title {
+    font-weight: 600;
+    letter-spacing: .045em;
+}
+
+.brand,
+.navbar .brand {
+    font-weight: 700;
+    letter-spacing: .08em;
+}
+
+.movie-title,
+.home-movie-title {
+    font-weight: 500;
+    letter-spacing: .01em;
+}
+
+.seat-screen-logo {
+    font-weight: 600;
+    letter-spacing: .12em;
 }
