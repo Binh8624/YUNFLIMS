@@ -75,7 +75,21 @@ class HomeController extends Controller
             ->limit(5)
             ->get();
 
-        return view('home', compact('movies', 'featured', 'comingSoon'));
+        $bannerMovies = Movie::query()
+            ->with('format')
+            ->whereIn('status', ['now_showing', 'coming_soon'])
+            ->where('age_rating', '<>', 'C')
+            ->whereNotNull('title')
+            ->where('title', '<>', '')
+            ->whereNotNull('poster')
+            ->where('poster', '<>', '')
+            ->withAvg('reviews', 'rating')
+            ->withCount('reviews')
+            ->orderByDesc('created_at')
+            ->limit(5)
+            ->get();
+
+        return view('home', compact('movies', 'featured', 'comingSoon', 'bannerMovies'));
     }
 
     public function movies(Request $request)

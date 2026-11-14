@@ -4,30 +4,30 @@
 
 @section('content')
 <div class="home-page">
-    <section class="cinema-hero" aria-label="Phim nổi bật">
+    <section class="cinema-hero" aria-label="Phim mới">
         <div
             id="featuredMovies"
             class="carousel slide carousel-fade"
             data-home-carousel
-            aria-label="Phim nổi bật"
+            aria-label="Phim mới"
         >
-            @if ($featured->count() > 1)
+            @if ($bannerMovies->count() > 1)
                 <div class="carousel-indicators">
-                    @foreach ($featured as $index => $movie)
+                    @foreach ($bannerMovies as $index => $movie)
                         <button
                             type="button"
                             data-bs-target="#featuredMovies"
                             data-bs-slide-to="{{ $index }}"
                             class="{{ $loop->first ? 'active' : '' }}"
                             @if ($loop->first) aria-current="true" @endif
-                            aria-label="Phim nổi bật {{ $loop->iteration }}"
+                            aria-label="Phim mới {{ $loop->iteration }}"
                         ></button>
                     @endforeach
                 </div>
             @endif
 
             <div class="carousel-inner">
-                @forelse ($featured as $movie)
+                @forelse ($bannerMovies as $movie)
                     <article class="carousel-item {{ $loop->first ? 'active' : '' }}">
                         <img
                             class="hero-backdrop"
@@ -37,7 +37,7 @@
                         >
                         <div class="container">
                             <div class="hero-content">
-                                <span class="hero-kicker">PHIM NỔI BẬT</span>
+                                <span class="hero-kicker">PHIM MỚI</span>
                                 <h1>{{ $movie->title }}</h1>
                                 @if ($movie->description)
                                     <p class="hero-description mb-3">{{ $movie->description }}</p>
@@ -56,12 +56,23 @@
                                     @endif
                                 </div>
                                 <div class="hero-actions">
-                                    <a href="{{ route('showtimes.index', ['movie_id' => $movie->id]) }}" class="btn btn-red">
-                                        <i class="bi bi-ticket-perforated me-2" aria-hidden="true"></i>Đặt vé ngay
-                                    </a>
-                                    <a href="{{ route('movies.show', $movie) }}" class="btn btn-outline-light">
-                                        Xem chi tiết
-                                    </a>
+                                    @if ($movie->status === 'coming_soon')
+                                        <a href="{{ route('movies.show', $movie) }}" class="btn btn-red">
+                                            <i class="bi bi-info-circle me-2" aria-hidden="true"></i>Xem chi tiết
+                                        </a>
+                                        @if ($movie->trailer_url)
+                                            <a href="{{ $movie->trailer_url }}" target="_blank" rel="noopener noreferrer" class="btn btn-outline-light">
+                                                <i class="bi bi-play-fill me-2" aria-hidden="true"></i>Trailer
+                                            </a>
+                                        @endif
+                                    @else
+                                        <a href="{{ route('showtimes.index', ['movie_id' => $movie->id]) }}" class="btn btn-red">
+                                            <i class="bi bi-ticket-perforated me-2" aria-hidden="true"></i>Đặt vé ngay
+                                        </a>
+                                        <a href="{{ route('movies.show', $movie) }}" class="btn btn-outline-light">
+                                            Xem chi tiết
+                                        </a>
+                                    @endif
                                 </div>
                             </div>
                         </div>
@@ -83,11 +94,11 @@
                 @endforelse
             </div>
 
-            @if ($featured->count() > 1)
-                <button class="carousel-control-prev" type="button" data-bs-target="#featuredMovies" data-bs-slide="prev" aria-label="Phim nổi bật trước">
+            @if ($bannerMovies->count() > 1)
+                <button class="carousel-control-prev" type="button" data-bs-target="#featuredMovies" data-bs-slide="prev" aria-label="Phim mới trước">
                     <span class="carousel-control-prev-icon" aria-hidden="true"></span>
                 </button>
-                <button class="carousel-control-next" type="button" data-bs-target="#featuredMovies" data-bs-slide="next" aria-label="Phim nổi bật tiếp theo">
+                <button class="carousel-control-next" type="button" data-bs-target="#featuredMovies" data-bs-slide="next" aria-label="Phim mới tiếp theo">
                     <span class="carousel-control-next-icon" aria-hidden="true"></span>
                 </button>
             @endif
