@@ -8,7 +8,13 @@
         <div class="col-lg-8">
             <div class="card bg-dark text-white border-secondary cinema-panel">
                 <div class="card-body p-4">
-                    <h2 class="mb-4">Thanh toán vé</h2>
+                    <div class="booking-step">
+                        <span class="booking-step-number">03</span>
+                        <div>
+                            <span class="hero-kicker">ĐẶT VÉ</span>
+                            <h1 class="h3 mb-0 mt-1">Thanh toán vé</h1>
+                        </div>
+                    </div>
                     <div class="alert alert-warning d-flex gap-3" role="status">
                         <i class="bi bi-clock-history fs-4" aria-hidden="true"></i>
                         <div>
@@ -64,26 +70,30 @@
                         </div>
                     </div>
 
-                    <div class="alert alert-secondary" role="status">
-                        <i class="bi bi-shield-lock me-2" aria-hidden="true"></i>
-                        Chế độ hiện tại là thanh toán mô phỏng. Dữ liệu gửi lên máy chủ sẽ được kiểm tra và lưu trạng thái giao dịch để không xác nhận vé khi chưa thanh toán thành công.
-                    </div>
-
-                    <form method="POST" action="{{ route('bookings.payment.process', $booking) }}" class="mb-4">
-                        @csrf
-                        <div class="d-flex flex-wrap gap-2">
-                            <button type="submit" name="payment_result" value="success" class="btn btn-success">
-                                <i class="bi bi-check-circle me-2" aria-hidden="true"></i>Mock thanh toán thành công
-                            </button>
-                            <button type="submit" name="payment_result" value="failed" class="btn btn-outline-warning">
-                                <i class="bi bi-x-circle me-2" aria-hidden="true"></i>Mock thanh toán thất bại
-                            </button>
-                            <button type="submit" name="payment_result" value="timeout" class="btn btn-outline-light">
-                                <i class="bi bi-clock-history me-2" aria-hidden="true"></i>Mock hết thời gian
-                            </button>
+                    <div class="payment-sandbox mb-4">
+                        <div class="payment-sandbox-head">
+                            <i class="bi bi-shield-lock" aria-hidden="true"></i>
+                            <div>
+                                <h3 class="h6 mb-1">Cổng thanh toán mô phỏng</h3>
+                                <p class="mb-0">Đây là môi trường demo. Mỗi lựa chọn bên dưới gửi một kết quả giao dịch khác nhau lên máy chủ để kiểm tra luồng xử lý; vé chỉ được xác nhận khi thanh toán thành công.</p>
+                            </div>
                         </div>
-                        <input type="hidden" name="payment_method" value="mock_test" />
-                    </form>
+                        <form method="POST" action="{{ route('bookings.payment.process', $booking) }}">
+                            @csrf
+                            <div class="d-flex flex-wrap gap-2">
+                                <button type="submit" name="payment_result" value="success" class="btn btn-success">
+                                    <i class="bi bi-check-circle me-2" aria-hidden="true"></i>Thanh toán thành công
+                                </button>
+                                <button type="submit" name="payment_result" value="failed" class="btn btn-outline-warning">
+                                    <i class="bi bi-x-circle me-2" aria-hidden="true"></i>Thanh toán thất bại
+                                </button>
+                                <button type="submit" name="payment_result" value="timeout" class="btn btn-outline-light">
+                                    <i class="bi bi-clock-history me-2" aria-hidden="true"></i>Hết thời gian
+                                </button>
+                            </div>
+                            <input type="hidden" name="payment_method" value="mock_test" />
+                        </form>
+                    </div>
 
                     <div class="d-flex flex-column flex-sm-row justify-content-between align-items-sm-center gap-3 mt-4 pt-3 border-top border-secondary">
                         <div>

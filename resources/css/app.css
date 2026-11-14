@@ -2847,3 +2847,133 @@ footer a:hover {
         font-size: .7rem;
     }
 }
+
+/* ===== UI refresh: CGV-inspired booking experience ===== */
+.cinema-hero .hero-backdrop {
+    filter: blur(14px) saturate(1.15) brightness(.8);
+    transform: scale(1.12);
+}
+
+.movie-age.age-P,
+.movie-age.age-K,
+.movie-age.age-T13 {
+    background: var(--ys-gold);
+    color: #231a00;
+}
+
+.movie-age.age-T16 {
+    background: #ff8a00;
+    color: #231a00;
+}
+
+.movie-age.age-T18,
+.movie-age.age-C {
+    background: var(--ys-red);
+    color: #fff;
+}
+
+.movie-age.age-unverified {
+    color: var(--ys-muted);
+    outline: 1px dashed rgb(245 196 81 / .7);
+    outline-offset: 1px;
+}
+
+.navbar .nav-link {
+    text-transform: uppercase;
+    letter-spacing: .6px;
+    font-size: .82rem;
+    font-weight: 600;
+}
+
+.navbar-book {
+    clip-path: polygon(0 0, 100% 0, 100% 34%, 94% 50%, 100% 66%, 100% 100%, 0 100%, 0 66%, 6% 50%, 0 34%);
+    text-transform: uppercase;
+    letter-spacing: .5px;
+    font-weight: 700;
+    padding-inline: 1.4rem;
+}
+
+.movie-card-actions {
+    gap: .5rem;
+}
+
+.movie-trailer-icon {
+    padding-inline: .6rem;
+}
+
+.payment-sandbox {
+    padding: 1.25rem 1.35rem;
+    border: 1px solid var(--ys-border);
+    border-radius: var(--ys-radius);
+    background: linear-gradient(145deg, #17171e, #141419);
+}
+
+.payment-sandbox-head {
+    display: flex;
+    align-items: flex-start;
+    gap: .85rem;
+    margin-bottom: 1rem;
+}
+
+.payment-sandbox-head > i {
+    color: var(--ys-gold);
+    font-size: 1.4rem;
+    line-height: 1.2;
+}
+
+.payment-sandbox-head p {
+    color: var(--ys-muted);
+    font-size: .85rem;
+}
+
+.home-promo-strip {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 1.25rem;
+    padding: 1.5rem 1.75rem;
+    border: 1px solid var(--ys-border);
+    border-radius: var(--ys-radius);
+    background: linear-gradient(100deg, #1b1206, #241a08 55%, var(--ys-card));
+}
+
+.home-promo-icon {
+    width: 54px;
+    height: 54px;
+    border-radius: 12px;
+    background: var(--ys-gold);
+    color: #231a00;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.6rem;
+    flex: 0 0 auto;
+}
+
+.home-promo-copy {
+    flex: 1;
+    min-width: 220px;
+}
+
+.home-promo-copy h3 {
+    margin: 0 0 .25rem;
+    font-size: 1.15rem;
+    font-weight: 700;
+    color: #fbf7ec;
+}
+
+.home-promo-copy p {
+    margin: 0;
+    font-size: .9rem;
+    color: var(--ys-muted);
+}
+
+@media (max-width: 575px) {
+    .home-promo-strip {
+        padding: 1.25rem;
+    }
+
+    .home-promo-copy {
+        min-width: 100%;
+    }
+}

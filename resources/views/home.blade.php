@@ -248,16 +248,16 @@
                 <h2 class="section-title mt-2 mb-0" id="promotions-title">Khuyến mãi nổi bật</h2>
             </div>
         </div>
-        <div class="home-promotion-empty">
-            <div class="home-promotion-icon" aria-hidden="true">
-                <i class="bi bi-stars"></i>
+        <div class="home-promo-strip">
+            <div class="home-promo-icon" aria-hidden="true">
+                <i class="bi bi-gift"></i>
             </div>
-            <div class="home-promotion-copy">
-                <h3>Ưu đãi đang được cập nhật</h3>
-                <p>Hiện hệ thống chưa có dữ liệu chương trình khuyến mãi. Vui lòng quay lại sau để khám phá các ưu đãi mới.</p>
+            <div class="home-promo-copy">
+                <h3>Ưu đãi dành cho thành viên YUNFLIMS</h3>
+                <p>Tích điểm đổi quà, voucher giảm giá và thẻ quà tặng — đặt vé online để nhận ưu đãi mới nhất.</p>
             </div>
-            <a href="{{ route('services.vouchers') }}" class="btn btn-outline-light">
-                Xem thông tin ưu đãi <i class="bi bi-arrow-right ms-1" aria-hidden="true"></i>
+            <a href="{{ route('services.vouchers') }}" class="btn btn-red">
+                Xem ưu đãi <i class="bi bi-arrow-right ms-1" aria-hidden="true"></i>
             </a>
         </div>
     </section>

@@ -3,7 +3,7 @@
         <a href="{{ route('movies.show', $movie) }}" class="movie-poster-link text-decoration-none" aria-label="Xem thông tin phim {{ $movie->title }}">
             <img src="{{ $movie->poster ?? 'https://placehold.co/600x900/1b1b22/e50914?text=YUNFLIMS' }}" alt="{{ $movie->title }}" class="movie-poster" loading="lazy">
             <span class="badge badge-red">{{ $movie->label ?? ($movie->status === 'coming_soon' ? 'SẮP CHIẾU' : 'ĐANG CHIẾU') }}</span>
-            <span class="movie-age" title="{{ $movie->age_rating_verified ? 'Phân loại đã xác minh' : 'Phân loại đang chờ xác minh' }}">{{ $movie->ageRatingLabel() }}</span>
+            <span class="movie-age {{ $movie->age_rating_verified ? 'age-'.($movie->age_rating ?: 'K') : 'age-unverified' }}" title="{{ $movie->age_rating_verified ? 'Phân loại đã xác minh' : 'Phân loại đang chờ xác minh' }}">{{ $movie->ageRatingLabel() }}</span>
         </a>
         @auth
             <form method="POST" action="{{ route('movies.favorite', $movie) }}" class="position-absolute top-0 end-0 p-2">
@@ -37,9 +37,6 @@
         </p>
 
         <div class="movie-card-actions">
-            <a href="{{ route('movies.show', $movie) }}" class="btn btn-outline-light btn-sm">
-                Chi tiết
-            </a>
             @if ($movie->status === 'coming_soon')
                 @if ($movie->trailer_url)
                     <a href="{{ $movie->trailer_url }}" target="_blank" rel="noopener noreferrer" class="btn btn-red btn-sm" aria-label="Xem trailer phim {{ $movie->title }}">
@@ -49,10 +46,10 @@
                     <span class="badge text-bg-secondary align-self-center">Sắp chiếu</span>
                 @endif
             @else
-                <a href="{{ route('showtimes.index', ['movie_id' => $movie->id]) }}" class="btn btn-red btn-sm">Mua vé</a>
+                <a href="{{ route('showtimes.index', ['movie_id' => $movie->id]) }}" class="btn btn-red btn-sm movie-book-cta">Đặt vé</a>
                 @if ($movie->trailer_url)
-                    <a href="{{ $movie->trailer_url }}" target="_blank" rel="noopener noreferrer" class="btn btn-outline-light btn-sm" aria-label="Xem trailer phim {{ $movie->title }}">
-                        <i class="bi bi-play-fill" aria-hidden="true"></i> Trailer
+                    <a href="{{ $movie->trailer_url }}" target="_blank" rel="noopener noreferrer" class="btn btn-outline-light btn-sm movie-trailer-icon" aria-label="Xem trailer phim {{ $movie->title }}">
+                        <i class="bi bi-play-fill" aria-hidden="true"></i>
                     </a>
                 @endif
             @endif
