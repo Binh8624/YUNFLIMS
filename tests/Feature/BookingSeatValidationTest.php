@@ -139,7 +139,7 @@ class BookingSeatValidationTest extends TestCase
             ->assertSessionHasErrors('seats');
     }
 
-    public function test_booking_uses_server_price_and_unconfigured_payment_stays_pending(): void
+    public function test_booking_uses_server_price_and_mock_payment_confirms_that_amount(): void
     {
         $user = User::factory()->create();
         $user->forceFill(['is_active' => true]);
@@ -206,7 +206,6 @@ class BookingSeatValidationTest extends TestCase
 
         $this->from(route('bookings.payment', $booking))
             ->post(route('bookings.payment.process', $booking), [
-                'payment_result' => 'success',
                 'payment_method' => 'mock_test',
             ])
             ->assertRedirect(route('bookings.show', $booking))

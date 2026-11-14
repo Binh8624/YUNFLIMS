@@ -64,26 +64,23 @@
                         </div>
                     </div>
 
-                    <div class="alert alert-secondary" role="status">
-                        <i class="bi bi-shield-lock me-2" aria-hidden="true"></i>
-                        Chế độ hiện tại là thanh toán mô phỏng. Dữ liệu gửi lên máy chủ sẽ được kiểm tra và lưu trạng thái giao dịch để không xác nhận vé khi chưa thanh toán thành công.
-                    </div>
-
-                    <form method="POST" action="{{ route('bookings.payment.process', $booking) }}" class="mb-4">
-                        @csrf
-                        <div class="d-flex flex-wrap gap-2">
-                            <button type="submit" name="payment_result" value="success" class="btn btn-success">
-                                <i class="bi bi-check-circle me-2" aria-hidden="true"></i>Mock thanh toán thành công
-                            </button>
-                            <button type="submit" name="payment_result" value="failed" class="btn btn-outline-warning">
-                                <i class="bi bi-x-circle me-2" aria-hidden="true"></i>Mock thanh toán thất bại
-                            </button>
-                            <button type="submit" name="payment_result" value="timeout" class="btn btn-outline-light">
-                                <i class="bi bi-clock-history me-2" aria-hidden="true"></i>Mock hết thời gian
-                            </button>
+                    @if ($mockPaymentEnabled)
+                        <div class="alert alert-secondary" role="status">
+                            <i class="bi bi-shield-lock me-2" aria-hidden="true"></i>
+                            Thanh toán mô phỏng chỉ khả dụng trong môi trường local/testing.
                         </div>
-                        <input type="hidden" name="payment_method" value="mock_test" />
-                    </form>
+
+                        <form method="POST" action="{{ route('bookings.payment.process', $booking) }}" class="mb-4">
+                            @csrf
+                            <button type="submit" class="btn btn-success">
+                                <i class="bi bi-check-circle me-2" aria-hidden="true"></i>Thanh toán mô phỏng
+                            </button>
+                        </form>
+                    @else
+                        <div class="alert alert-warning" role="status">
+                            Thanh toán mô phỏng không khả dụng trong môi trường này.
+                        </div>
+                    @endif
 
                     <div class="d-flex flex-column flex-sm-row justify-content-between align-items-sm-center gap-3 mt-4 pt-3 border-top border-secondary">
                         <div>

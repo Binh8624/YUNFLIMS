@@ -24,6 +24,8 @@ use Illuminate\Validation\ValidationException;
 
 class BookingController extends Controller
 {
+    private const MOCK_PAYMENT_METHOD = 'mock_test';
+
     public function index(Request $request)
     {
         $this->expirePendingHolds();
@@ -525,7 +527,9 @@ class BookingController extends Controller
             'bookingSeats.seat',
         ]);
 
-        return view('bookings.payment', compact('booking'));
+        $mockPaymentEnabled = $this->mockPaymentEnabled();
+
+        return view('bookings.payment', compact('booking', 'mockPaymentEnabled'));
     }
 
     public function cancel(Booking $booking)
@@ -569,15 +573,32 @@ class BookingController extends Controller
 
     public function processPayment(Request $request, Booking $booking)
     {
+        abort_unless($this->mockPaymentEnabled(), 403, 'Thanh toán mô phỏng không được bật trong môi trường này.');
         abort_unless($booking->user_id === auth()->id(), 403);
 
-        $processingResult = DB::transaction(function () use ($request, $booking) {
+        $request->validate([
+            'payment_result' => ['prohibited'],
+            'payment_status' => ['prohibited'],
+            'payment_method' => ['sometimes', 'required', Rule::in([self::MOCK_PAYMENT_METHOD])],
+        ]);
+
+        $processingResult = DB::transaction(function () use ($booking) {
             $lockedBooking = Booking::whereKey($booking->id)
                 ->lockForUpdate()
                 ->firstOrFail();
 
-            if ($lockedBooking->status !== 'pending') {
-                return ['redirect' => route('bookings.show', $lockedBooking), 'with' => ['success' => 'Giao dịch đã được xử lý trước đó. Vé đã được xác nhận.']];
+            if ($lockedBooking->status === 'confirmed' && $lockedBooking->payment_status === 'paid') {
+                return [
+                    'redirect' => route('bookings.show', $lockedBooking),
+                    'with' => ['success' => 'Booking này đã được thanh toán trước đó.'],
+                ];
+            }
+
+            if ($lockedBooking->status !== 'pending' || $lockedBooking->payment_status === 'paid') {
+                return [
+                    'redirect' => route('bookings.show', $lockedBooking),
+                    'with' => ['errors' => ['payment' => 'Booking đã bị hủy hoặc giao dịch đã được xử lý.']],
+                ];
             }
 
             if (! $lockedBooking->hold_expires_at || $lockedBooking->hold_expires_at->isPast()) {
@@ -586,62 +607,35 @@ class BookingController extends Controller
                     'payment_status' => 'timeout',
                 ]);
 
-                return ['redirect' => route('bookings.show', $lockedBooking), 'with' => ['errors' => ['payment' => 'Thời gian giữ ghế đã hết. Vui lòng đặt lại ghế.']]];
+                return [
+                    'redirect' => route('bookings.show', $lockedBooking),
+                    'with' => ['errors' => ['payment' => 'Thời gian giữ ghế đã hết. Vui lòng đặt lại ghế.']],
+                ];
             }
 
-            $validated = $request->validate([
-                'payment_result' => ['required', 'in:success,failed,timeout'],
-                'payment_method' => ['nullable', 'string', 'max:50'],
-            ]);
-
-            $paymentMethod = $validated['payment_method'] ?? 'mock_test';
             $reference = $lockedBooking->payment_reference ?: 'YF-REF-' . strtoupper(\Illuminate\Support\Str::random(12));
 
-            if ($lockedBooking->payment_status === 'paid' && $lockedBooking->status === 'confirmed') {
-                return ['redirect' => route('bookings.show', $lockedBooking), 'with' => ['success' => 'Giao dịch đã được xử lý trước đó. Vé đã được xác nhận.']];
+            $lockedBooking->update([
+                'payment_method' => self::MOCK_PAYMENT_METHOD,
+                'payment_reference' => $reference,
+                'payment_status' => 'paid',
+                'paid_at' => now(),
+                'status' => 'confirmed',
+                'ticket_status' => 'available',
+            ]);
+
+            $user = $lockedBooking->user()->first();
+            if ($user) {
+                $pointsEarned = max(10, (int) round((float) $lockedBooking->total_amount / 10000));
+                $user->loyalty_points = ($user->loyalty_points ?? 0) + $pointsEarned;
+                $user->member_tier = \App\Models\User::resolveMemberTier($user->loyalty_points);
+                $user->save();
             }
 
-            switch ($validated['payment_result']) {
-                case 'success':
-                    $lockedBooking->update([
-                        'payment_method' => $paymentMethod,
-                        'payment_reference' => $reference,
-                        'payment_status' => 'paid',
-                        'paid_at' => now(),
-                        'status' => 'confirmed',
-                        'ticket_status' => 'available',
-                    ]);
-
-                    $user = $lockedBooking->user()->first();
-                    if ($user) {
-                        $pointsEarned = max(10, (int) round((float) $lockedBooking->total_amount / 10000));
-                        $user->loyalty_points = ($user->loyalty_points ?? 0) + $pointsEarned;
-                        $user->member_tier = \App\Models\User::resolveMemberTier($user->loyalty_points);
-                        $user->save();
-                    }
-
-                    return ['redirect' => route('bookings.show', $lockedBooking), 'with' => ['success' => 'Thanh toán mô phỏng thành công. Vé đã được xác nhận và điểm tích lũy đã được cập nhật.']];
-                case 'failed':
-                    $lockedBooking->update([
-                        'payment_method' => $paymentMethod,
-                        'payment_reference' => $reference,
-                        'payment_status' => 'failed',
-                        'status' => 'pending',
-                    ]);
-
-                    return ['redirect' => route('bookings.payment', $lockedBooking), 'with' => ['errors' => ['payment' => 'Thanh toán mô phỏng thất bại. Vui lòng thử lại hoặc chọn phương thức khác.']]];
-                case 'timeout':
-                    $lockedBooking->update([
-                        'payment_method' => $paymentMethod,
-                        'payment_reference' => $reference,
-                        'payment_status' => 'timeout',
-                        'status' => 'cancelled',
-                    ]);
-
-                    return ['redirect' => route('bookings.show', $lockedBooking), 'with' => ['errors' => ['payment' => 'Thanh toán mô phỏng hết thời gian. Đơn đã bị hủy và ghế được giải phóng.']]];
-                default:
-                    return ['redirect' => route('bookings.payment', $lockedBooking), 'with' => ['errors' => ['payment' => 'Không thể xử lý thanh toán mô phỏng lúc này.']]];
-            }
+            return [
+                'redirect' => route('bookings.show', $lockedBooking),
+                'with' => ['success' => 'Thanh toán mô phỏng thành công. Vé đã được xác nhận và điểm tích lũy đã được cập nhật.'],
+            ];
         });
 
         if (isset($processingResult['with']['errors'])) {
@@ -649,6 +643,11 @@ class BookingController extends Controller
         }
 
         return redirect($processingResult['redirect'])->with($processingResult['with']);
+    }
+
+    private function mockPaymentEnabled(): bool
+    {
+        return app()->environment(['local', 'testing']);
     }
 
     public function show(Booking $booking)
