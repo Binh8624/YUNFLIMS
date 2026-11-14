@@ -178,29 +178,12 @@
         });
     }
 
-    function showFeedback(message, isolatedSeatIds = [], proposedSeatIds = []) {
+    function showFeedback(message) {
         feedbackElement.replaceChildren();
         feedbackElement.className = 'alert alert-warning';
         const text = document.createElement('span');
         text.textContent = message;
         feedbackElement.append(text);
-
-        const additions = isolatedSeatIds.filter((seatId) => !proposedSeatIds.includes(Number(seatId)));
-        if (additions.length && proposedSeatIds.length + additions.length <= 10) {
-            const labels = additions.map((seatId) => {
-                const checkbox = document.querySelector(`.seat-checkbox[value="${seatId}"]`);
-                return checkbox?.dataset.seatLabel;
-            }).filter(Boolean);
-
-            if (labels.length) {
-                const button = document.createElement('button');
-                button.type = 'button';
-                button.className = 'btn btn-sm btn-outline-light ms-2 mt-2';
-                button.textContent = `Chọn thêm ${labels.join(', ')} để tránh ghế lẻ`;
-                button.addEventListener('click', () => validateSelection([...proposedSeatIds, ...additions]));
-                feedbackElement.append(button);
-            }
-        }
 
         feedbackElement.classList.remove('d-none');
     }
@@ -266,11 +249,7 @@
                 const unavailableIds = Object.keys(result.unavailableSeats || {}).map(Number);
                 acceptedSelection = acceptedSelection.filter((seatId) => !unavailableIds.includes(seatId));
                 setSelection(acceptedSelection);
-                showFeedback(
-                    result.message || 'Không thể chọn các vị trí này.',
-                    result.isolatedSeatIds || [],
-                    normalizedSeatIds
-                );
+                showFeedback(result.message || 'Không thể chọn các vị trí này.');
                 return false;
             }
 

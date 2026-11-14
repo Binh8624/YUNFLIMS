@@ -20,7 +20,7 @@ class SeatSelectionRuleTest extends TestCase
 {
     use DatabaseTransactions;
 
-    public function test_availability_endpoint_reports_the_orphan_seat_and_does_not_ignore_other_bookings(): void
+    public function test_availability_endpoint_allows_free_seat_selection_even_if_it_would_leave_an_orphan(): void
     {
         [$user, $showtime, $seats] = $this->fixture([1, 2, 3]);
         $this->booking($user, $showtime, $seats[1], 'confirmed');
@@ -28,8 +28,13 @@ class SeatSelectionRuleTest extends TestCase
         $this->actingAs($this->activeUser())
             ->postJson(route('bookings.seats.check', $showtime), ['seats' => [$seats[3]->id]])
             ->assertOk()
+            ->assertJsonPath('valid', true)
+            ->assertJsonPath('unavailableSeats', []);
+
+        $this->postJson(route('bookings.seats.check', $showtime), ['seats' => [$seats[1]->id]])
+            ->assertOk()
             ->assertJsonPath('valid', false)
-            ->assertJsonPath('isolatedSeatIds.0', $seats[2]->id);
+            ->assertJsonPath('unavailableSeats.'.$seats[1]->id, 'booked');
     }
 
     public function test_direct_booking_request_cannot_bypass_the_single_seat_rule(): void
@@ -40,7 +45,9 @@ class SeatSelectionRuleTest extends TestCase
 
         $this->actingAs($customer)
             ->post(route('bookings.store', $showtime), ['seats' => [$seats[3]->id]])
-            ->assertSessionHasErrors('seats');
+            ->assertSessionHasErrors([
+                'seats' => 'Không thể đặt các vị trí đã chọn vì sẽ để lại một ghế trống duy nhất. Vui lòng chọn vị trí khác.',
+            ]);
 
         $this->assertDatabaseMissing('bookings', [
             'user_id' => $customer->id,

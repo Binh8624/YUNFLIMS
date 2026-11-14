@@ -257,15 +257,14 @@ class BookingController extends Controller
 
     public function checkSeatSelection(
         Request $request,
-        Showtime $showtime,
-        SingleSeatRule $singleSeatRule
+        Showtime $showtime
     ): JsonResponse {
         $validated = $request->validate([
             'seats' => ['present', 'array', 'max:10'],
             'seats.*' => ['required', 'integer', 'distinct', 'exists:seats,id'],
         ]);
 
-        $result = DB::transaction(function () use ($validated, $showtime, $singleSeatRule) {
+        $result = DB::transaction(function () use ($validated, $showtime) {
             $lockedShowtime = Showtime::whereKey($showtime->id)
                 ->lockForUpdate()
                 ->firstOrFail();
@@ -330,20 +329,6 @@ class BookingController extends Controller
                     'message' => 'Một hoặc nhiều ghế vừa được đặt hoặc đang được giữ bởi khách khác.',
                     'unavailableSeats' => $unavailableSeats,
                     'isolatedSeatIds' => [],
-                ];
-            }
-
-            $roomSeats = Seat::where('room_id', $lockedShowtime->room_id)
-                ->orderBy('row_number')
-                ->orderBy('seat_number')
-                ->get();
-            $orphanedSeatIds = $singleSeatRule->orphanedSeatIds($roomSeats, $occupiedSeatIds, $selectedIds);
-            if ($orphanedSeatIds !== []) {
-                return [
-                    'valid' => false,
-                    'message' => 'Không thể chọn vị trí này vì sẽ để lại một ghế trống duy nhất. Vui lòng chọn vị trí khác.',
-                    'unavailableSeats' => [],
-                    'isolatedSeatIds' => $orphanedSeatIds,
                 ];
             }
 
