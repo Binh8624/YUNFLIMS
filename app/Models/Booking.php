@@ -26,6 +26,10 @@ class Booking extends Model
         'ticket_status',
         'ticket_used_at',
         'checkin_count',
+        'cancelled_at',
+        'cancelled_by',
+        'cancel_reason',
+        'points_earned',
     ];
 
     protected function casts(): array
@@ -71,5 +75,15 @@ class Booking extends Model
     public function bookingSeats(): HasMany
     {
         return $this->hasMany(BookingSeat::class);
+    }
+
+    public function payments(): HasMany
+    {
+        return $this->hasMany(Payment::class);
+    }
+
+    public function refunds(): HasMany
+    {
+        return $this->hasMany(PaymentRefund::class);
     }
 }
