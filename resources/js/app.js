@@ -98,7 +98,7 @@ document.querySelectorAll('[data-home-carousel]').forEach((element) => {
     }
 
     const carousel = Carousel.getOrCreateInstance(element, {
-        interval: 6500,
+        interval: 3000,
         pause: 'hover',
         touch: true,
         wrap: true,
