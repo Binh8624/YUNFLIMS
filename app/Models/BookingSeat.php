@@ -18,6 +18,7 @@ class BookingSeat extends Model
     {
         return [
             'price' => 'decimal:2',
+            'released_at' => 'datetime',
         ];
     }
 
