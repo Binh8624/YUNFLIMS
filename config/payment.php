@@ -3,6 +3,8 @@
 return [
     'default' => env('PAYMENT_GATEWAY', 'mock'),
 
+    'refund_cutoff_hours' => (float) env('PAYMENT_REFUND_CUTOFF_HOURS', 0),
+
     'gateways' => [
         'mock' => [
             'label' => 'Cổng mô phỏng (demo)',

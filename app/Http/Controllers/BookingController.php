@@ -11,6 +11,7 @@ use App\Models\Room;
 use App\Models\Seat;
 use App\Models\Showtime;
 use App\Services\Payment\PaymentService;
+use App\Services\Payment\RefundService;
 use App\Services\ShowtimeRules;
 use App\Services\SingleSeatRule;
 use App\Services\TicketPriceCalculator;
@@ -521,43 +522,48 @@ class BookingController extends Controller
         return view('bookings.payment', compact('booking', 'gateways'));
     }
 
-    public function cancel(Booking $booking)
+    public function cancel(Request $request, Booking $booking, RefundService $refunds)
     {
         abort_unless($booking->user_id === auth()->id(), 403);
+        $validated = $request->validate([
+            'reason' => ['nullable', 'string', 'max:500'],
+        ]);
+        $reason = $validated['reason'] ?? 'Khách yêu cầu hủy vé';
 
-        $cancelled = DB::transaction(function () use ($booking) {
-            $lockedBooking = Booking::whereKey($booking->id)->lockForUpdate()->firstOrFail();
-
-            if ($lockedBooking->status === 'pending') {
+        if ($booking->status === 'pending') {
+            DB::transaction(function () use ($booking, $reason) {
+                $lockedBooking = Booking::whereKey($booking->id)->lockForUpdate()->firstOrFail();
+                if ($lockedBooking->status !== 'pending') {
+                    throw ValidationException::withMessages([
+                        'booking' => 'Đơn đặt vé này không còn ở trạng thái chờ thanh toán.',
+                    ]);
+                }
                 $lockedBooking->update([
                     'status' => 'cancelled',
                     'payment_status' => 'cancelled',
                     'ticket_status' => 'cancelled',
+                    'cancelled_at' => now(),
+                    'cancelled_by' => auth()->id(),
+                    'cancel_reason' => $reason,
                 ]);
+                BookingSeat::where('booking_id', $lockedBooking->id)
+                    ->whereNull('released_at')
+                    ->update(['released_at' => now()]);
+            });
 
-                return true;
-            }
-
-            if ($lockedBooking->status === 'confirmed' && $lockedBooking->payment_status === 'paid') {
-                $lockedBooking->update([
-                    'status' => 'cancelled',
-                    'payment_status' => 'refunded',
-                    'ticket_status' => 'cancelled',
-                ]);
-
-                return true;
-            }
-
-            return false;
-        });
-
-        if (! $cancelled) {
             return redirect()->route('bookings.show', $booking)
-                ->withErrors(['booking' => 'Đơn đặt vé này không còn ở trạng thái chờ thanh toán.']);
+                ->with('success', 'Đã hủy đơn và giải phóng các ghế đang giữ.');
+        }
+
+        $refund = $refunds->request($booking, $request->user(), $reason);
+
+        if ($refund->status === \App\Models\PaymentRefund::STATUS_SUCCEEDED) {
+            return redirect()->route('bookings.show', $booking)
+                ->with('success', 'Đã hủy vé và hoàn tiền thành công. Điểm thưởng tương ứng đã được thu hồi.');
         }
 
         return redirect()->route('bookings.show', $booking)
-            ->with('success', 'Đã hủy đơn và giải phóng các ghế đang giữ.');
+            ->withErrors(['booking' => 'Yêu cầu hoàn tiền thất bại. Vé giữ nguyên trạng thái, vui lòng thử lại hoặc liên hệ hỗ trợ.']);
     }
 
     public function processPayment(Request $request, Booking $booking, PaymentService $payments)

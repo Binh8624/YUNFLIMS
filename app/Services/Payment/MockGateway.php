@@ -3,6 +3,8 @@
 namespace App\Services\Payment;
 
 use App\Models\Payment;
+use App\Models\PaymentRefund;
+use Illuminate\Support\Str;
 
 class MockGateway implements PaymentGateway
 {
@@ -54,6 +56,17 @@ class MockGateway implements PaymentGateway
             'amount' => (float) $payment->amount,
             'message' => 'Mock gateway không có giao dịch chờ đối soát',
             'raw' => ['order_ref' => $payment->order_ref, 'status' => 'pending'],
+        ];
+    }
+
+    public function refund(Payment $payment, PaymentRefund $refund): array
+    {
+        return [
+            'signature_valid' => true,
+            'status' => PaymentRefund::STATUS_SUCCEEDED,
+            'gateway_refund_id' => 'MOCKRF-' . strtoupper(Str::random(10)),
+            'message' => 'Mock gateway hoàn tiền thành công',
+            'raw' => ['order_ref' => $payment->order_ref, 'refund_id' => $refund->id, 'status' => 'succeeded'],
         ];
     }
 

@@ -113,6 +113,11 @@
                         @csrf
                         <button type="submit" class="btn btn-outline-light">Hủy giữ ghế</button>
                     </form>
+                @elseif ($booking->status === 'confirmed' && $booking->payment_status === 'paid')
+                    <form method="POST" action="{{ route('bookings.cancel', $booking) }}" onsubmit="return confirm('Hủy vé và yêu cầu hoàn tiền theo chính sách? Điểm thưởng của đơn sẽ bị thu hồi.')">
+                        @csrf
+                        <button type="submit" class="btn btn-outline-warning">Hủy vé &amp; hoàn tiền</button>
+                    </form>
                 @endif
             </div>
         </div>

@@ -3,6 +3,7 @@
 namespace App\Services\Payment;
 
 use App\Models\Payment;
+use App\Models\PaymentRefund;
 use Illuminate\Support\Facades\Http;
 use RuntimeException;
 
@@ -115,6 +116,49 @@ class VnpayGateway implements PaymentGateway
             'transaction_code' => isset($response['vnp_TransactionNo']) ? (string) $response['vnp_TransactionNo'] : null,
             'amount' => isset($response['vnp_Amount']) ? ((float) $response['vnp_Amount']) / 100 : null,
             'message' => 'VNPay querydr response code ' . ($response['vnp_ResponseCode'] ?? ''),
+            'raw' => $response,
+        ];
+    }
+
+    public function refund(Payment $payment, PaymentRefund $refund): array
+    {
+        $params = [
+            'vnp_RequestId' => (string) random_int(10000000, 99999999),
+            'vnp_Version' => '2.1.0',
+            'vnp_Command' => 'refund',
+            'vnp_TmnCode' => $this->config('tmn_code'),
+            'vnp_TransactionType' => '02',
+            'vnp_TxnRef' => $payment->order_ref,
+            'vnp_Amount' => (int) round((float) $refund->amount * 100),
+            'vnp_OrderInfo' => 'Hoan tien ' . $payment->order_ref,
+            'vnp_TransactionDate' => $payment->created_at->format('YmdHis'),
+            'vnp_CreateDate' => now()->format('YmdHis'),
+            'vnp_IpAddr' => request()->ip() ?? '127.0.0.1',
+        ];
+        $params['vnp_SecureHash'] = $this->hash($params);
+
+        $response = Http::asForm()->timeout(15)->post($this->config('api_url'), $params)->json();
+        if (! is_array($response)) {
+            return [
+                'signature_valid' => false,
+                'status' => PaymentRefund::STATUS_FAILED,
+                'gateway_refund_id' => null,
+                'message' => 'VNPay refund không phản hồi',
+                'raw' => [],
+            ];
+        }
+
+        $secureHash = (string) ($response['vnp_SecureHash'] ?? '');
+        $unsigned = $response;
+        unset($unsigned['vnp_SecureHash'], $unsigned['vnp_SecureHashType']);
+
+        return [
+            'signature_valid' => $secureHash !== '' && hash_equals($this->hash($unsigned), $secureHash),
+            'status' => ($response['vnp_ResponseCode'] ?? '') === '00'
+                ? PaymentRefund::STATUS_SUCCEEDED
+                : PaymentRefund::STATUS_FAILED,
+            'gateway_refund_id' => isset($response['vnp_TransactionNo']) ? (string) $response['vnp_TransactionNo'] : null,
+            'message' => 'VNPay refund response code ' . ($response['vnp_ResponseCode'] ?? ''),
             'raw' => $response,
         ];
     }

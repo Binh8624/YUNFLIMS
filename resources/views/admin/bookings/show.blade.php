@@ -36,6 +36,15 @@
             </dl>
             @if ($booking->status === 'pending' && $booking->payment_status !== 'paid')
                 <form method="POST" action="{{ route('admin.bookings.cancel', $booking) }}" onsubmit="return confirm('Hủy đơn đặt vé đang chờ này?')">@csrf @method('PATCH')<button class="btn btn-danger">Hủy đơn chờ thanh toán</button></form>
+            @elseif ($booking->status === 'confirmed' && $booking->payment_status === 'paid')
+                <form method="POST" action="{{ route('admin.bookings.cancel', $booking) }}" onsubmit="return confirm('Hủy đơn đã thanh toán và hoàn tiền qua cổng?')">
+                    @csrf @method('PATCH')
+                    <div class="mb-2">
+                        <label class="form-label text-secondary">Lý do hủy / hoàn tiền (bắt buộc)</label>
+                        <textarea name="reason" class="form-control bg-dark text-white border-secondary" rows="2" maxlength="500" required></textarea>
+                    </div>
+                    <button class="btn btn-danger">Hủy đơn &amp; hoàn tiền</button>
+                </form>
             @endif
         </div></div></div>
     </div>
