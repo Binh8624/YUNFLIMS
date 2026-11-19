@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Booking;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Auth;
 
 class TicketVerificationController extends Controller
 {
@@ -27,7 +28,8 @@ class TicketVerificationController extends Controller
 
     public function checkIn(string $bookingCode)
     {
-        $result = DB::transaction(function () use ($bookingCode) {
+        $actor = Auth::user();
+        $result = DB::transaction(function () use ($bookingCode, $actor) {
             $lockedBooking = Booking::where('booking_code', $bookingCode)
                 ->where('status', 'confirmed')
                 ->where('payment_status', 'paid')
@@ -37,6 +39,9 @@ class TicketVerificationController extends Controller
             if (! $lockedBooking) {
                 abort(404);
             }
+
+            $cinemaId = (int) $lockedBooking->showtime->room->cinema_id;
+            abort_unless($actor->canManageCinema($cinemaId), 403);
 
             $alreadyUsed = ($lockedBooking->ticket_status ?? 'available') === 'used';
 

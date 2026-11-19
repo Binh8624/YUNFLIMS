@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class User extends Authenticatable
 {
@@ -32,9 +33,6 @@ class User extends Authenticatable
         'name',
         'email',
         'password',
-        'role',
-        'member_tier',
-        'loyalty_points',
     ];
 
     /**
@@ -59,6 +57,8 @@ class User extends Authenticatable
             'password' => 'hashed',
             'is_active' => 'boolean',
             'loyalty_points' => 'integer',
+            'cinema_id' => 'integer',
+            'locked_until' => 'datetime',
         ];
     }
 
@@ -97,7 +97,6 @@ class User extends Authenticatable
     public static function normalizeRole(?string $role): ?string
     {
         return match ($role) {
-            self::ROLE_ADMIN => self::ROLE_SUPER_ADMIN,
             default => $role,
         };
     }
@@ -106,6 +105,7 @@ class User extends Authenticatable
     {
         return [
             self::ROLE_SUPER_ADMIN => 'Super Admin',
+            self::ROLE_ADMIN => 'Admin',
             self::ROLE_BRANCH_MANAGER => 'Quản lý chi nhánh',
             self::ROLE_TICKET_SELLER => 'Nhân viên bán vé',
             self::ROLE_TICKET_CHECKER => 'Nhân viên soát vé',
@@ -116,7 +116,14 @@ class User extends Authenticatable
 
     public static function allowedRoleValues(): array
     {
-        return array_merge(array_keys(self::roleOptions()), [self::ROLE_ADMIN]);
+        return [
+            self::ROLE_SUPER_ADMIN,
+            self::ROLE_ADMIN,
+            self::ROLE_BRANCH_MANAGER,
+            self::ROLE_TICKET_SELLER,
+            self::ROLE_TICKET_CHECKER,
+            self::ROLE_CONTENT_STAFF,
+        ];
     }
 
     public static function roleLabel(?string $role): string
@@ -135,11 +142,26 @@ class User extends Authenticatable
     {
         return in_array(self::normalizeRole($this->role), [
             self::ROLE_SUPER_ADMIN,
+            self::ROLE_ADMIN,
             self::ROLE_BRANCH_MANAGER,
             self::ROLE_TICKET_SELLER,
             self::ROLE_TICKET_CHECKER,
             self::ROLE_CONTENT_STAFF,
         ], true);
+    }
+
+    public function cinema(): BelongsTo
+    {
+        return $this->belongsTo(Cinema::class);
+    }
+
+    public function canManageCinema(?int $cinemaId): bool
+    {
+        if ($this->role === self::ROLE_SUPER_ADMIN || $this->role === self::ROLE_ADMIN) {
+            return true;
+        }
+
+        return $cinemaId !== null && (int) $this->cinema_id === $cinemaId;
     }
 
     public function hasPermission(string $permission): bool
@@ -148,6 +170,16 @@ class User extends Authenticatable
 
         $permissions = [
             self::ROLE_SUPER_ADMIN => [
+                'access_admin',
+                'manage_cinema',
+                'manage_content',
+                'manage_bookings',
+                'manage_payments',
+                'manage_reports',
+                'manage_users',
+                'check_tickets',
+            ],
+            self::ROLE_ADMIN => [
                 'access_admin',
                 'manage_cinema',
                 'manage_content',

@@ -16,6 +16,9 @@ class ReportController extends Controller
 {
     public function index(Request $request)
     {
+        if (! $request->user()->canManageCinema(null)) {
+            $request->merge(['cinema_id' => $request->user()->cinema_id]);
+        }
         [$from, $to, $cinemaId] = $this->filters($request);
         $paidBookings = $this->paidBookings($from, $to, $cinemaId);
         $bookingCount = (clone $paidBookings)->count();
@@ -87,6 +90,9 @@ class ReportController extends Controller
 
     public function export(Request $request): StreamedResponse
     {
+        if (! $request->user()->canManageCinema(null)) {
+            $request->merge(['cinema_id' => $request->user()->cinema_id]);
+        }
         [$from, $to, $cinemaId] = $this->filters($request);
         $rows = $this->baseRevenueRows($from, $to)
             ->join('cinemas', 'rooms.cinema_id', '=', 'cinemas.id')

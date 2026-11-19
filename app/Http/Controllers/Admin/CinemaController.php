@@ -12,6 +12,7 @@ class CinemaController extends Controller
     public function index(Request $request)
     {
         $cinemas = Cinema::withCount('rooms')
+            ->when(! $request->user()->canManageCinema(null), fn ($query) => $query->whereKey($request->user()->cinema_id))
             ->when($request->filled('search'), function ($query) use ($request) {
                 $search = trim($request->string('search')->toString());
                 $query->where(function ($query) use ($search) {
@@ -29,6 +30,7 @@ class CinemaController extends Controller
 
     public function create()
     {
+        abort_unless(auth()->user()->canManageCinema(null), 403);
         return view('admin.cinemas.form', ['cinema' => new Cinema]);
     }
 
@@ -41,11 +43,13 @@ class CinemaController extends Controller
 
     public function edit(Cinema $cinema)
     {
+        abort_unless(request()->user()->canManageCinema((int) $cinema->id), 403);
         return view('admin.cinemas.form', compact('cinema'));
     }
 
     public function update(Request $request, Cinema $cinema)
     {
+        abort_unless($request->user()->canManageCinema((int) $cinema->id), 403);
         $cinema->update($this->validateCinema($request));
 
         return redirect()->route('admin.cinemas.index')->with('success', 'Đã cập nhật rạp chiếu.');
@@ -53,6 +57,7 @@ class CinemaController extends Controller
 
     public function destroy(Cinema $cinema)
     {
+        abort_unless(request()->user()->canManageCinema((int) $cinema->id), 403);
         if ($cinema->rooms()->exists()) {
             throw ValidationException::withMessages([
                 'cinema' => 'Không thể xóa rạp còn phòng chiếu. Hãy vô hiệu hóa rạp để giữ lịch sử dữ liệu.',

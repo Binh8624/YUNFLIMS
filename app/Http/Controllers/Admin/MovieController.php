@@ -61,6 +61,7 @@ class MovieController extends Controller
             'status' => 'required|in:now_showing,coming_soon,inactive',
             'format_id' => ['required', 'integer', 'exists:formats,id'],
         ]);
+        $this->validateSafeUrls($validated);
 
         $format = $this->activeCinemaFormat((int) $validated['format_id']);
         $validated['age_rating_verified'] = $request->boolean('age_rating_verified');
@@ -96,6 +97,7 @@ class MovieController extends Controller
             'status' => 'required|in:now_showing,coming_soon,inactive',
             'format_id' => ['required', 'integer', 'exists:formats,id'],
         ]);
+        $this->validateSafeUrls($validated);
 
         $format = $this->activeCinemaFormat((int) $validated['format_id']);
         $validated['age_rating_verified'] = $request->boolean('age_rating_verified');
@@ -132,6 +134,18 @@ class MovieController extends Controller
         return redirect()
             ->route('admin.movies.index')
             ->with('success', 'Xóa phim thành công!');
+    }
+
+    private function validateSafeUrls(array $validated): void
+    {
+        foreach (['poster', 'trailer_url'] as $field) {
+            $url = $validated[$field] ?? null;
+            if ($url && ! in_array(parse_url($url, PHP_URL_SCHEME), ['http', 'https'], true)) {
+                throw ValidationException::withMessages([
+                    $field => 'Chỉ được sử dụng liên kết HTTP hoặc HTTPS.',
+                ]);
+            }
+        }
     }
 
     private function activeCinemaFormat(int $formatId): Format

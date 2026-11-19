@@ -7,6 +7,7 @@ use Illuminate\Pagination\Paginator;
 use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
+use Illuminate\Validation\Rules\Password;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -27,6 +28,11 @@ class AppServiceProvider extends ServiceProvider
         Gate::define('manage-reports', fn (User $user) => $user->hasPermission('manage_reports'));
         Gate::define('manage-users', fn (User $user) => $user->hasPermission('manage_users'));
         Gate::define('check-tickets', fn (User $user) => $user->hasPermission('check_tickets'));
+        Gate::define('manage-formats', fn (User $user) => in_array($user->role, [User::ROLE_SUPER_ADMIN, User::ROLE_ADMIN], true));
+        Gate::define('manage-pricing', fn (User $user) => in_array($user->role, [User::ROLE_SUPER_ADMIN, User::ROLE_ADMIN], true));
+        Gate::define('view-audit-logs', fn (User $user) => $user->role === User::ROLE_SUPER_ADMIN);
+
+        Password::defaults(fn () => Password::min(12)->mixedCase()->numbers()->symbols());
 
         Blade::if('admin', function () {
             return auth()->check() && auth()->user()->isAdminStaff();

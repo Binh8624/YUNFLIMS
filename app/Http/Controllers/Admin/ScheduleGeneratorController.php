@@ -20,11 +20,15 @@ class ScheduleGeneratorController extends Controller
 
     public function index()
     {
+        $roomsQuery = Room::with(['cinema', 'format'])
+            ->where('is_active', true)
+            ->whereHas('cinema', fn ($query) => $query->where('is_active', true));
+        if (! request()->user()->canManageCinema(null)) {
+            $roomsQuery->where('cinema_id', request()->user()->cinema_id);
+        }
         return view('admin.showtimes.auto', [
             'movies' => Movie::with('format')->where('status', '!=', 'inactive')->orderBy('title')->get(),
-            'rooms' => Room::with(['cinema', 'format'])
-                ->where('is_active', true)
-                ->whereHas('cinema', fn ($query) => $query->where('is_active', true))
+            'rooms' => $roomsQuery
                 ->orderBy('name')
                 ->get(),
             'formats' => Format::whereIn('slug', ['2d', '3d', 'imax'])->where('is_active', true)->orderBy('name')->get(),
@@ -111,6 +115,9 @@ class ScheduleGeneratorController extends Controller
     private function roomsFor(array $data, bool $lockForUpdate = false): Collection
     {
         $rooms = Room::with(['cinema', 'format']);
+        if (! request()->user()->canManageCinema(null)) {
+            $rooms->where('cinema_id', request()->user()->cinema_id);
+        }
 
         if ($data['auto_allocate']) {
             $rooms

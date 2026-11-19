@@ -58,13 +58,15 @@ Route::middleware('guest')->group(function () {
         ->name('register');
 
     Route::post('/register', [AuthController::class, 'register'])
+        ->middleware('throttle:5,1')
         ->name('register.store');
 
     Route::get('/login', [AuthController::class, 'showLogin'])
         ->name('login');
 
     Route::post('/login', [AuthController::class, 'login'])
-        ->name('login.store');
+            ->middleware('throttle:5,1')
+            ->name('login.store');
 });
 
 Route::post('/logout', [AuthController::class, 'logout'])
@@ -79,7 +81,7 @@ Route::post('/movies/{movie}/reviews', [ReviewController::class, 'store'])
     ->name('movies.reviews.store');
 
 Route::post('/movies/{movie}/favorite', [FavoriteController::class, 'toggle'])
-    ->middleware(['auth', 'active'])
+    ->middleware(['auth', 'active', 'throttle:30,1'])
     ->name('movies.favorite');
 
 Route::middleware(['auth', 'active'])->group(function () {
@@ -90,9 +92,11 @@ Route::middleware(['auth', 'active'])->group(function () {
         ->name('favorites.index');
 
     Route::put('/profile', [AuthController::class, 'updateProfile'])
+        ->middleware('throttle:10,1')
         ->name('profile.update');
 
     Route::put('/profile/password', [AuthController::class, 'updatePassword'])
+        ->middleware('throttle:5,1')
         ->name('profile.password');
 
     Route::get('/bookings', [
@@ -142,7 +146,7 @@ Route::prefix('admin')
     ->group(function () {
         Route::get('/', [DashboardController::class, 'index'])->name('dashboard');
 
-        Route::middleware('can:access-admin')->group(function () {
+        Route::middleware('can:view-audit-logs')->group(function () {
             Route::get('/activity-logs', [ActivityLogController::class, 'index'])->name('activity-logs.index');
         });
 
@@ -199,12 +203,16 @@ Route::prefix('admin')
 
             Route::get('/reviews', [AdminReviewController::class, 'index'])->name('reviews.index');
             Route::delete('/reviews/{review}', [AdminReviewController::class, 'destroy'])->name('reviews.destroy');
+        });
 
+        Route::middleware('can:manage-formats')->group(function () {
             Route::get('/formats', [FormatController::class, 'index'])->name('formats.index');
             Route::post('/formats', [FormatController::class, 'store'])->name('formats.store');
             Route::put('/formats/{format}', [FormatController::class, 'update'])->name('formats.update');
             Route::delete('/formats/{format}', [FormatController::class, 'destroy'])->name('formats.destroy');
+        });
 
+        Route::middleware('can:manage-pricing')->group(function () {
             Route::get('/pricing', [PricingRuleController::class, 'index'])->name('pricing.index');
             Route::post('/pricing', [PricingRuleController::class, 'store'])->name('pricing.store');
             Route::put('/pricing/{pricingRule}', [PricingRuleController::class, 'update'])->name('pricing.update');
@@ -213,6 +221,7 @@ Route::prefix('admin')
 
         Route::middleware('can:manage-users')->group(function () {
             Route::get('/users', [UserController::class, 'index'])->name('users.index');
+            Route::post('/users', [UserController::class, 'storeStaff'])->name('users.store');
             Route::get('/users/{user}', [UserController::class, 'show'])->name('users.show');
             Route::patch('/users/{user}/role', [UserController::class, 'updateRole'])->name('users.role');
             Route::patch('/users/{user}/active', [UserController::class, 'toggleActive'])->name('users.active');

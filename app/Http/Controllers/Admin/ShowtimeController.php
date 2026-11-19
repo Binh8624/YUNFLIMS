@@ -15,8 +15,13 @@ use Illuminate\Validation\ValidationException;
 
 class ShowtimeController extends Controller
 {
+    private function authorizeCinemaScope(Request $request): void
+    {
+        abort_unless($request->user()->hasPermission('manage_cinema'), 403);
+    }
     public function index(Request $request)
     {
+        $this->authorizeCinemaScope($request);
         $filters = $request->validate([
             'search' => ['nullable', 'string', 'max:100'],
             'movie_id' => ['nullable', 'integer', 'exists:movies,id'],
@@ -27,6 +32,10 @@ class ShowtimeController extends Controller
         ]);
 
         $showtimes = Showtime::with(['movie.format', 'room.cinema', 'room.format', 'format'])
+            ->when(! $request->user()->canManageCinema(null), fn ($query) => $query->whereHas(
+                'room',
+                fn ($room) => $room->where('cinema_id', $request->user()->cinema_id)
+            ))
             ->when(! empty($filters['search']), function ($query) use ($filters) {
                 $search = trim($filters['search']);
                 $query->where(function ($query) use ($search) {
@@ -55,11 +64,13 @@ class ShowtimeController extends Controller
 
     public function create()
     {
+        $cinemaId = request()->user()->cinema_id;
         $movies = Movie::with('format')->where('status', '!=', 'inactive')->orderBy('title')->get();
 
         $rooms = Room::with(['cinema', 'format'])
             ->where('is_active', true)
             ->whereHas('cinema', fn ($query) => $query->where('is_active', true))
+            ->when(! request()->user()->canManageCinema(null), fn ($query) => $query->where('cinema_id', $cinemaId))
             ->orderBy('name')
             ->get();
         $formats = Format::whereIn('slug', ['2d', '3d', 'imax'])->where('is_active', true)->orderBy('name')->get();
@@ -70,6 +81,8 @@ class ShowtimeController extends Controller
     public function store(Request $request)
     {
         $data = $this->validateShowtime($request);
+        $room = Room::findOrFail($data['room_id']);
+        abort_unless($request->user()->canManageCinema((int) $room->cinema_id), 403);
         DB::transaction(function () use ($data) {
             $room = Room::whereKey($data['room_id'])->lockForUpdate()->firstOrFail();
             $movie = Movie::whereKey($data['movie_id'])->lockForUpdate()->firstOrFail();
@@ -85,6 +98,7 @@ class ShowtimeController extends Controller
 
     public function edit(Showtime $showtime)
     {
+        abort_unless(request()->user()->canManageCinema((int) $showtime->room->cinema_id), 403);
         $movies = Movie::with('format')->where('status', '!=', 'inactive')->orderBy('title')->get();
 
         $rooms = Room::with(['cinema', 'format'])->orderBy('name')->get();
@@ -98,7 +112,10 @@ class ShowtimeController extends Controller
 
     public function update(Request $request, Showtime $showtime)
     {
+        abort_unless($request->user()->canManageCinema((int) $showtime->room->cinema_id), 403);
         $data = $this->validateShowtime($request);
+        $targetRoom = Room::findOrFail($data['room_id']);
+        abort_unless($request->user()->canManageCinema((int) $targetRoom->cinema_id), 403);
         DB::transaction(function () use ($data, $showtime) {
             $room = Room::whereKey($data['room_id'])->lockForUpdate()->firstOrFail();
             $movie = Movie::whereKey($data['movie_id'])->lockForUpdate()->firstOrFail();
@@ -121,6 +138,7 @@ class ShowtimeController extends Controller
 
     public function destroy(Showtime $showtime)
     {
+        abort_unless(request()->user()->canManageCinema((int) $showtime->room->cinema_id), 403);
         $action = DB::transaction(function () use ($showtime) {
             $lockedShowtime = Showtime::whereKey($showtime->id)->lockForUpdate()->firstOrFail();
             if ($lockedShowtime->bookings()->where('status', 'confirmed')->exists()) {

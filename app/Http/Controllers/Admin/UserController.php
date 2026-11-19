@@ -7,9 +7,54 @@ use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
+use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Validation\Rules\Password;
 
 class UserController extends Controller
 {
+    public function storeStaff(Request $request)
+    {
+        Gate::authorize('manage-users');
+
+        $staffRoles = [
+            User::ROLE_ADMIN,
+            User::ROLE_SUPER_ADMIN,
+            User::ROLE_BRANCH_MANAGER,
+            User::ROLE_TICKET_SELLER,
+            User::ROLE_TICKET_CHECKER,
+            User::ROLE_CONTENT_STAFF,
+        ];
+
+        $data = $request->validate([
+            'name' => ['required', 'string', 'max:255'],
+            'email' => ['required', 'email', 'max:255', 'unique:users,email'],
+            'password' => ['required', 'confirmed', Password::defaults()],
+            'role' => ['required', 'in:'.implode(',', $staffRoles)],
+            'cinema_id' => ['nullable', 'integer', 'exists:cinemas,id'],
+        ]);
+
+        if (! in_array($request->user()->role, [User::ROLE_SUPER_ADMIN, User::ROLE_ADMIN], true)
+            && $data['role'] !== User::ROLE_CUSTOMER) {
+            abort(403);
+        }
+
+        $cinemaRole = in_array($data['role'], [User::ROLE_BRANCH_MANAGER, User::ROLE_TICKET_SELLER, User::ROLE_TICKET_CHECKER], true);
+        if ($cinemaRole && empty($data['cinema_id'])) {
+            throw ValidationException::withMessages(['cinema_id' => 'Vai trò chi nhánh bắt buộc chọn rạp.']);
+        }
+
+        $user = new User;
+        $user->name = $data['name'];
+        $user->email = strtolower(trim($data['email']));
+        $user->password = Hash::make($data['password']);
+        $user->role = $data['role'];
+        $user->is_active = true;
+        $user->cinema_id = $cinemaRole ? $data['cinema_id'] : null;
+        $user->save();
+
+        return back()->with('success', 'Đã tạo tài khoản nhân viên.');
+    }
     public function index(Request $request)
     {
         $users = User::withCount('bookings')
@@ -48,8 +93,11 @@ class UserController extends Controller
 
     public function updateRole(Request $request, User $user)
     {
+        Gate::authorize('manage-users');
+
         $data = $request->validate([
             'role' => ['required', 'in:'.implode(',', User::allowedRoleValues())],
+            'cinema_id' => ['nullable', 'integer', 'exists:cinemas,id'],
         ]);
 
         $role = User::normalizeRole($data['role']);
@@ -66,24 +114,33 @@ class UserController extends Controller
             $normalizedCurrentRole = User::normalizeRole($lockedUser->role);
 
             if (
-                in_array($normalizedCurrentRole, [User::ROLE_SUPER_ADMIN, User::ROLE_BRANCH_MANAGER, User::ROLE_TICKET_SELLER, User::ROLE_TICKET_CHECKER, User::ROLE_CONTENT_STAFF], true)
+                $normalizedCurrentRole === User::ROLE_SUPER_ADMIN
                 && $lockedUser->is_active
                 && $role !== User::ROLE_SUPER_ADMIN
-                && User::whereIn('role', [
-                    User::ROLE_SUPER_ADMIN,
-                    User::ROLE_BRANCH_MANAGER,
-                    User::ROLE_TICKET_SELLER,
-                    User::ROLE_TICKET_CHECKER,
-                    User::ROLE_CONTENT_STAFF,
-                    User::ROLE_ADMIN,
-                ])->where('is_active', true)->lockForUpdate()->count() <= 1
+                && User::where('role', User::ROLE_SUPER_ADMIN)->where('is_active', true)->lockForUpdate()->count() <= 1
             ) {
                 throw ValidationException::withMessages([
-                    'role' => 'Không thể hạ quyền quản trị cuối cùng đang hoạt động.',
+                    'role' => 'Không thể hạ quyền Super Admin cuối cùng đang hoạt động.',
                 ]);
             }
 
-            $lockedUser->update(['role' => $role]);
+            $lockedUser->role = $role;
+            $branchRoles = [
+                User::ROLE_BRANCH_MANAGER,
+                User::ROLE_TICKET_SELLER,
+                User::ROLE_TICKET_CHECKER,
+            ];
+            if (in_array($role, $branchRoles, true)) {
+                if (empty($data['cinema_id'])) {
+                    throw ValidationException::withMessages([
+                        'cinema_id' => 'Vai trò chi nhánh bắt buộc chọn rạp.',
+                    ]);
+                }
+                $lockedUser->cinema_id = (int) $data['cinema_id'];
+            } else {
+                $lockedUser->cinema_id = null;
+            }
+            $lockedUser->save();
         });
 
         return back()->with('success', 'Đã cập nhật quyền người dùng.');
@@ -91,6 +148,8 @@ class UserController extends Controller
 
     public function toggleActive(Request $request, User $user)
     {
+        Gate::authorize('manage-users');
+
         if ($request->user()->is($user)) {
             throw ValidationException::withMessages([
                 'user' => 'Không thể khóa tài khoản quản trị đang đăng nhập.',
@@ -102,22 +161,15 @@ class UserController extends Controller
 
             $normalizedRole = User::normalizeRole($lockedUser->role);
 
-            if (in_array($normalizedRole, [User::ROLE_SUPER_ADMIN, User::ROLE_BRANCH_MANAGER, User::ROLE_TICKET_SELLER, User::ROLE_TICKET_CHECKER, User::ROLE_CONTENT_STAFF], true) && $lockedUser->is_active) {
-                $activeAdmins = User::whereIn('role', [
-                    User::ROLE_SUPER_ADMIN,
-                    User::ROLE_BRANCH_MANAGER,
-                    User::ROLE_TICKET_SELLER,
-                    User::ROLE_TICKET_CHECKER,
-                    User::ROLE_CONTENT_STAFF,
-                    User::ROLE_ADMIN,
-                ])
+            if ($normalizedRole === User::ROLE_SUPER_ADMIN && $lockedUser->is_active) {
+                $activeSuperAdmins = User::where('role', User::ROLE_SUPER_ADMIN)
                     ->where('is_active', true)
                     ->lockForUpdate()
                     ->count();
 
-                if ($activeAdmins <= 1) {
+                if ($activeSuperAdmins <= 1) {
                     throw ValidationException::withMessages([
-                        'user' => 'Không thể khóa người quản trị cuối cùng đang hoạt động.',
+                        'user' => 'Không thể khóa Super Admin cuối cùng đang hoạt động.',
                     ]);
                 }
             }

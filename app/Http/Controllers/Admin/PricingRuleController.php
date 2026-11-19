@@ -6,11 +6,13 @@ use App\Http\Controllers\Controller;
 use App\Models\Format;
 use App\Models\PricingRule;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Gate;
 
 class PricingRuleController extends Controller
 {
     public function index()
     {
+        Gate::authorize('manage-pricing');
         $rules = PricingRule::with('format')->orderByDesc('priority')->orderBy('name')->paginate(15);
         $formats = Format::orderBy('name')->get();
 

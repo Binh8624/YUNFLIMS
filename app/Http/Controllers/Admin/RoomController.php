@@ -10,12 +10,15 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
+use Illuminate\Support\Facades\Gate;
 
 class RoomController extends Controller
 {
     public function index(Request $request)
     {
+        Gate::authorize('manage-cinema');
         $rooms = Room::with(['cinema', 'format'])->withCount('seats')
+            ->when(! $request->user()->canManageCinema(null), fn ($query) => $query->where('cinema_id', $request->user()->cinema_id))
             ->when($request->filled('cinema_id'), fn ($query) => $query->where('cinema_id', $request->integer('cinema_id')))
             ->when($request->filled('search'), function ($query) use ($request) {
                 $search = trim($request->string('search')->toString());
@@ -30,16 +33,17 @@ class RoomController extends Controller
             ->paginate(10)
             ->withQueryString();
 
-        $cinemas = Cinema::orderBy('name')->get();
+        $cinemas = $this->cinemasForRequest();
 
         return view('admin.rooms.index', compact('rooms', 'cinemas'));
     }
 
     public function create()
     {
+        $cinemas = $this->cinemasForRequest();
         return view('admin.rooms.form', [
             'room' => new Room(['total_seats' => 60, 'is_active' => true]),
-            'cinemas' => Cinema::orderBy('name')->get(),
+            'cinemas' => $cinemas,
             'formats' => Format::whereIn('slug', ['2d', '3d', 'imax'])->where('is_active', true)->orderBy('name')->get(),
         ]);
     }
@@ -47,6 +51,7 @@ class RoomController extends Controller
     public function store(Request $request)
     {
         $data = $this->validateRoom($request);
+        abort_unless($request->user()->canManageCinema((int) $data['cinema_id']), 403);
         $format = $this->activeCinemaFormat((int) $data['format_id']);
 
         Room::create($data)->formats()->sync([$format->id]);
@@ -56,15 +61,17 @@ class RoomController extends Controller
 
     public function edit(Room $room)
     {
+        abort_unless($this->canManageRoom($room), 403);
         return view('admin.rooms.form', [
             'room' => $room->load('format'),
-            'cinemas' => Cinema::orderBy('name')->get(),
+            'cinemas' => $this->cinemasForRequest(),
             'formats' => Format::whereIn('slug', ['2d', '3d', 'imax'])->where('is_active', true)->orderBy('name')->get(),
         ]);
     }
 
     public function update(Request $request, Room $room)
     {
+        abort_unless($this->canManageRoom($room), 403);
         $data = $this->validateRoom($request, $room);
         $format = $this->activeCinemaFormat((int) $data['format_id']);
 
@@ -92,6 +99,7 @@ class RoomController extends Controller
 
     public function destroy(Room $room)
     {
+        abort_unless($this->canManageRoom($room), 403);
         if (
             $room->showtimes()->exists()
             || $room->seats()->whereHas('bookingSeats')->exists()
@@ -117,6 +125,20 @@ class RoomController extends Controller
             'total_seats' => ['required', 'integer', 'min:1', 'max:65535'],
             'is_active' => ['required', 'boolean'],
         ]);
+    }
+
+    private function canManageRoom(Room $room): bool
+    {
+        return request()->user()->canManageCinema((int) $room->cinema_id);
+    }
+
+    private function cinemasForRequest()
+    {
+        $query = Cinema::query()->orderBy('name');
+        if (! request()->user()->canManageCinema(null)) {
+            $query->whereKey(request()->user()->cinema_id);
+        }
+        return $query->get();
     }
 
     private function activeCinemaFormat(int $formatId): Format

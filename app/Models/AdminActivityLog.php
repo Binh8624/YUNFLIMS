@@ -14,7 +14,19 @@ class AdminActivityLog extends Model
         'subject_id',
         'http_method',
         'response_status',
+        'ip_address',
+        'user_agent',
+        'before',
+        'after',
     ];
+
+    protected function casts(): array
+    {
+        return [
+            'before' => 'array',
+            'after' => 'array',
+        ];
+    }
 
     public function actor(): BelongsTo
     {

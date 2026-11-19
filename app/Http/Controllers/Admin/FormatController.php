@@ -6,11 +6,13 @@ use App\Http\Controllers\Controller;
 use App\Models\Format;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
+use Illuminate\Support\Facades\Gate;
 
 class FormatController extends Controller
 {
     public function index()
     {
+        Gate::authorize('manage-formats');
         $formats = Format::whereIn('slug', ['2d', '3d', 'imax'])
             ->withCount(['movies', 'rooms', 'showtimes'])
             ->orderBy('name')

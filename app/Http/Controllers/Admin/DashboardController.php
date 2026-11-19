@@ -18,6 +18,9 @@ class DashboardController extends Controller
 {
     public function index(Request $request)
     {
+        if (! $request->user()->canManageCinema(null)) {
+            $request->merge(['cinema_id' => $request->user()->cinema_id]);
+        }
         $filters = $request->validate([
             'period' => ['nullable', 'in:today,7d,30d,month,custom'],
             'from' => ['nullable', 'date', 'required_if:period,custom'],

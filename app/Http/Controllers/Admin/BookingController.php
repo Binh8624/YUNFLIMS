@@ -14,6 +14,10 @@ class BookingController extends Controller
     public function index(Request $request)
     {
         $bookings = Booking::with(['user', 'showtime.movie', 'showtime.room.cinema'])
+            ->when(! $request->user()->canManageCinema(null), fn ($query) => $query->whereHas(
+                'showtime.room',
+                fn ($room) => $room->where('cinema_id', $request->user()->cinema_id)
+            ))
             ->when($request->filled('status'), fn ($query) => $query->where('status', $request->input('status')))
             ->when($request->filled('payment_status'), fn ($query) => $query->where('payment_status', $request->input('payment_status')))
             ->when($request->filled('search'), function ($query) use ($request) {
@@ -32,6 +36,7 @@ class BookingController extends Controller
 
     public function show(Booking $booking)
     {
+        abort_unless(request()->user()->canManageCinema((int) $booking->showtime->room->cinema_id), 403);
         $booking->load([
             'user',
             'showtime.movie',
@@ -44,6 +49,7 @@ class BookingController extends Controller
 
     public function cancel(Booking $booking)
     {
+        abort_unless(request()->user()->canManageCinema((int) $booking->showtime->room->cinema_id), 403);
         DB::transaction(function () use ($booking) {
             Showtime::whereKey($booking->showtime_id)->lockForUpdate()->firstOrFail();
             $lockedBooking = Booking::whereKey($booking->id)->lockForUpdate()->firstOrFail();

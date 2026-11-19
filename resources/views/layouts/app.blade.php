@@ -487,24 +487,42 @@
                     <a class="admin-pro-link {{ request()->routeIs('admin.dashboard') ? 'active' : '' }}" href="{{ route('admin.dashboard') }}"><i class="bi bi-grid-1x2" aria-hidden="true"></i><span>Dashboard</span></a>
 
                     <span class="admin-pro-nav-label">VẬN HÀNH</span>
+                    @can('manage-cinema')
                     <a class="admin-pro-link {{ request()->routeIs('admin.cinemas.*') ? 'active' : '' }}" href="{{ route('admin.cinemas.index') }}"><i class="bi bi-building" aria-hidden="true"></i><span>Rạp chiếu</span></a>
                     <a class="admin-pro-link {{ request()->routeIs('admin.rooms.*') ? 'active' : '' }}" href="{{ route('admin.rooms.index') }}"><i class="bi bi-door-open" aria-hidden="true"></i><span>Phòng &amp; sơ đồ ghế</span></a>
                     <a class="admin-pro-link {{ request()->routeIs('admin.showtimes.*') ? 'active' : '' }}" href="{{ route('admin.showtimes.index') }}"><i class="bi bi-calendar2-week" aria-hidden="true"></i><span>Lịch chiếu</span></a>
                     <a class="admin-pro-link {{ request()->routeIs('admin.showtimes.auto') ? 'active' : '' }}" href="{{ route('admin.showtimes.auto') }}"><i class="bi bi-magic" aria-hidden="true"></i><span>Tạo lịch tự động</span></a>
+                    @endcan
+                    @can('manage-bookings')
                     <a class="admin-pro-link {{ request()->routeIs('admin.bookings.*') ? 'active' : '' }}" href="{{ route('admin.bookings.index') }}"><i class="bi bi-ticket-perforated" aria-hidden="true"></i><span>Đơn đặt vé</span></a>
+                    @endcan
+                    @can('manage-payments')
                     <a class="admin-pro-link {{ request()->routeIs('admin.payments.*') ? 'active' : '' }}" href="{{ route('admin.payments.index') }}"><i class="bi bi-credit-card" aria-hidden="true"></i><span>Thanh toán</span></a>
+                    @endcan
+                    @can('manage-reports')
                     <a class="admin-pro-link {{ request()->routeIs('admin.reports.*') ? 'active' : '' }}" href="{{ route('admin.reports.index') }}"><i class="bi bi-bar-chart-line" aria-hidden="true"></i><span>Báo cáo doanh thu</span></a>
+                    @endcan
 
                     <span class="admin-pro-nav-label">NỘI DUNG &amp; CẤU HÌNH</span>
+                    @can('manage-content')
                     <a class="admin-pro-link {{ request()->routeIs('admin.movies.*') ? 'active' : '' }}" href="{{ route('admin.movies.index') }}"><i class="bi bi-film" aria-hidden="true"></i><span>Phim</span></a>
-                    <a class="admin-pro-link {{ request()->routeIs('admin.formats.*') ? 'active' : '' }}" href="{{ route('admin.formats.index') }}"><i class="bi bi-badge-3d" aria-hidden="true"></i><span>Định dạng</span></a>
-                    <a class="admin-pro-link {{ request()->routeIs('admin.pricing.*') ? 'active' : '' }}" href="{{ route('admin.pricing.index') }}"><i class="bi bi-tags" aria-hidden="true"></i><span>Quy tắc giá</span></a>
                     <a class="admin-pro-link {{ request()->routeIs('admin.reviews.*') ? 'active' : '' }}" href="{{ route('admin.reviews.index') }}"><i class="bi bi-star" aria-hidden="true"></i><span>Đánh giá</span></a>
+                    @endcan
+                    @can('manage-formats')
+                    <a class="admin-pro-link {{ request()->routeIs('admin.formats.*') ? 'active' : '' }}" href="{{ route('admin.formats.index') }}"><i class="bi bi-badge-3d" aria-hidden="true"></i><span>Định dạng</span></a>
+                    @endcan
+                    @can('manage-pricing')
+                    <a class="admin-pro-link {{ request()->routeIs('admin.pricing.*') ? 'active' : '' }}" href="{{ route('admin.pricing.index') }}"><i class="bi bi-tags" aria-hidden="true"></i><span>Quy tắc giá</span></a>
+                    @endcan
 
                     <span class="admin-pro-nav-label">TÀI KHOẢN</span>
+                    @can('manage-users')
                     <a class="admin-pro-link {{ request()->routeIs('admin.users.*') ? 'active' : '' }}" href="{{ route('admin.users.index') }}"><i class="bi bi-people" aria-hidden="true"></i><span>Người dùng &amp; quyền</span></a>
+                    @endcan
                     <span class="admin-pro-nav-label">HỆ THỐNG</span>
+                    @can('view-audit-logs')
                     <a class="admin-pro-link {{ request()->routeIs('admin.activity-logs.*') ? 'active' : '' }}" href="{{ route('admin.activity-logs.index') }}"><i class="bi bi-journal-text" aria-hidden="true"></i><span>Nhật ký hoạt động</span></a>
+                    @endcan
                 </nav>
                 <div class="admin-pro-sidebar-foot"><span class="admin-pro-status-dot"></span> Hệ thống quản trị</div>
             </aside>

@@ -39,6 +39,8 @@ class AdminActivityLogMiddleware
             'subject_id' => $subjectId,
             'http_method' => $request->method(),
             'response_status' => $response->getStatusCode(),
+            'ip_address' => $request->ip(),
+            'user_agent' => substr((string) $request->userAgent(), 0, 1000),
         ]);
 
         return $response;

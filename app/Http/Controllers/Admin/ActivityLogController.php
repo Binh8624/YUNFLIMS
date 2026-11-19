@@ -5,11 +5,13 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\AdminActivityLog;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Gate;
 
 class ActivityLogController extends Controller
 {
     public function index(Request $request)
     {
+        Gate::authorize('view-audit-logs');
         $filters = $request->validate([
             'search' => ['nullable', 'string', 'max:100'],
             'action' => ['nullable', 'string', 'max:120'],

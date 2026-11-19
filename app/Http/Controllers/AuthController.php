@@ -8,6 +8,10 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rules\Password;
+use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Support\Str;
 
 class AuthController extends Controller
 {
@@ -21,7 +25,7 @@ class AuthController extends Controller
         $validated = $request->validate([
             'name' => 'required|string|max:255',
             'email' => 'required|email|max:255|unique:users,email',
-            'password' => 'required|string|min:8|confirmed',
+            'password' => ['required', 'confirmed', Password::defaults()],
         ]);
 
         $user = User::create([
@@ -52,9 +56,29 @@ class AuthController extends Controller
             'password' => 'required|string',
         ]);
 
+        $user = User::where('email', strtolower($credentials['email']))->first();
+        $lockKey = 'login-lock:'.Str::lower($credentials['email']).':'.$request->ip();
+
+        if ($user?->locked_until && $user->locked_until->isFuture()) {
+            return back()->withErrors([
+                'email' => 'Tài khoản tạm thời bị khóa do đăng nhập sai quá nhiều lần.',
+            ])->onlyInput('email');
+        }
+
         if (Auth::attempt($credentials, $request->boolean('remember'))) {
+            RateLimiter::clear($lockKey);
+            if ($user) {
+                $user->locked_until = null;
+                $user->save();
+            }
             if (! Auth::user()->is_active) {
                 Auth::logout();
+
+                RateLimiter::hit($lockKey, 900);
+                if (RateLimiter::attempts($lockKey) >= 5 && $user) {
+                    $user->locked_until = now()->addMinutes(15);
+                    $user->save();
+                }
 
                 return back()
                     ->withErrors(['email' => 'Tài khoản này hiện đang bị khóa.'])
@@ -75,6 +99,12 @@ class AuthController extends Controller
             }
 
             return redirect()->intended(route('home'));
+        }
+
+        RateLimiter::hit($lockKey, 900);
+        if (RateLimiter::attempts($lockKey) >= 5 && $user) {
+            $user->locked_until = now()->addMinutes(15);
+            $user->save();
         }
 
         return back()
@@ -101,7 +131,15 @@ class AuthController extends Controller
             'email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')->ignore($user->getKey())],
         ]);
 
-        $user->update($validated);
+        if (strtolower($validated['email']) !== strtolower($user->email)) {
+            $validated['email_verified_at'] = null;
+        }
+        $user->name = $validated['name'];
+        $user->email = $validated['email'];
+        if (isset($validated['email_verified_at'])) {
+            $user->email_verified_at = null;
+        }
+        $user->save();
 
         return back()->with('success', 'Cập nhật thông tin tài khoản thành công.');
     }
@@ -110,7 +148,7 @@ class AuthController extends Controller
     {
         $validated = $request->validate([
             'current_password' => ['required', 'current_password'],
-            'password' => ['required', 'string', 'min:8', 'confirmed'],
+            'password' => ['required', 'confirmed', Password::defaults()],
         ], [
             'current_password.current_password' => 'Mật khẩu hiện tại không đúng.',
         ]);
@@ -118,6 +156,7 @@ class AuthController extends Controller
         $request->user()->update([
             'password' => Hash::make($validated['password']),
         ]);
+        DB::table('sessions')->where('user_id', $request->user()->id)->delete();
 
         return back()->with('success', 'Mật khẩu đã được cập nhật thành công.');
     }
