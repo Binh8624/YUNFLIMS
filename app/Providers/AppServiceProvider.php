@@ -27,6 +27,10 @@ class AppServiceProvider extends ServiceProvider
         Gate::define('manage-reports', fn (User $user) => $user->hasPermission('manage_reports'));
         Gate::define('manage-users', fn (User $user) => $user->hasPermission('manage_users'));
         Gate::define('check-tickets', fn (User $user) => $user->hasPermission('check_tickets'));
+        Gate::define('manage-services', fn (User $user) => $user->hasPermission('manage_services'));
+Gate::define('manage-promotions', fn (User $user) => $user->hasPermission('manage_promotions'));
+Gate::define('manage-members', fn (User $user) => $user->hasPermission('manage_members'));
+Gate::define('manage-gift-cards', fn (User $user) => $user->hasPermission('manage_gift_cards'));
 
         Blade::if('admin', function () {
             return auth()->check() && auth()->user()->isAdminStaff();

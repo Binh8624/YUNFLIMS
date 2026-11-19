@@ -1,3 +1,4 @@
+
 @extends('layouts.app')
 
 @section('title', 'Thêm suất chiếu - YUNFLIMS')
@@ -28,59 +29,109 @@
         </div>
     @endif
 
+    @if ($formats->isEmpty())
+        <div class="alert alert-warning">
+            Chưa có định dạng phim đang hoạt động.
+        </div>
+    @endif
+
     <form method="POST" action="{{ route('admin.showtimes.store') }}">
         @csrf
 
+        {{-- Chọn phim --}}
         <div class="mb-3">
             <label class="form-label">Phim *</label>
 
-            <select name="movie_id" class="form-select" required>
+            <select
+                name="movie_id"
+                id="movie_id"
+                class="form-select"
+                required
+            >
                 <option value="">-- Chọn phim --</option>
 
                 @foreach ($movies as $movie)
                     <option
                         value="{{ $movie->id }}"
-                        data-format-id="{{ $movie->format_id }}"
+                        data-format-ids="{{ $movie->formats->pluck('id')->implode(',') }}"
+                        data-duration="{{ $movie->duration }}"
                         @selected(old('movie_id') == $movie->id)
                     >
-                        {{ $movie->title }} — {{ $movie->format?->name }}
+                        {{ $movie->title }}
+                        — {{ $movie->duration }} phút
+                        ({{ $movie->formats->pluck('name')->join(', ') ?: 'Chưa có định dạng' }})
                     </option>
                 @endforeach
             </select>
+
+            <small class="text-secondary">
+                Danh sách định dạng được lấy từ các định dạng đã cấu hình cho phim.
+            </small>
         </div>
 
+        {{-- Chọn định dạng --}}
+        <div class="mb-3">
+            <label class="form-label">Định dạng suất chiếu *</label>
+
+            <select
+                name="format_id"
+                id="format_id"
+                class="form-select"
+                required
+            >
+                <option value="">-- Chọn định dạng --</option>
+
+                @foreach ($formats as $format)
+                    <option
+                        value="{{ $format->id }}"
+                        @selected(old('format_id') == $format->id)
+                    >
+                        {{ $format->name }}
+                    </option>
+                @endforeach
+            </select>
+
+            <small class="text-secondary">
+                Chỉ có thể chọn định dạng mà phim đang hỗ trợ.
+            </small>
+        </div>
+
+        {{-- Chọn rạp và phòng --}}
         <div class="mb-3">
             <label class="form-label">Rạp và phòng chiếu *</label>
 
-            <select name="room_id" class="form-select" required>
+            <select
+                name="room_id"
+                id="room_id"
+                class="form-select"
+                required
+            >
                 <option value="">-- Chọn phòng --</option>
 
                 @foreach ($rooms as $room)
                     <option
                         value="{{ $room->id }}"
-                        data-format-id="{{ $room->format_id }}"
+                        data-format-ids="{{ $room->formats->pluck('id')->implode(',') }}"
                         @selected(old('room_id') == $room->id)
                     >
-                        {{ $room->cinema->name }} — {{ $room->room_code }} — {{ $room->name }} ({{ $room->format?->name }})
+                        {{ $room->cinema->name }}
+                        — {{ $room->room_code }}
+                        — {{ $room->name }}
+                        ({{ $room->formats->pluck('name')->join(', ') ?: 'Chưa có định dạng' }})
                     </option>
                 @endforeach
             </select>
+
+            <small class="text-secondary">
+                Chỉ những phòng hỗ trợ định dạng suất chiếu đã chọn mới được hiển thị.
+            </small>
         </div>
 
-        <div class="mb-3">
-            <label class="form-label">Định dạng *</label>
-            <select name="format_id" class="form-select" required>
-                <option value="">-- Chọn định dạng --</option>
-                @foreach ($formats as $format)
-                    <option value="{{ $format->id }}" @selected(old('format_id') == $format->id)>{{ $format->name }}</option>
-                @endforeach
-            </select>
-            <small class="text-secondary">Định dạng được xác định theo phim; chỉ các phòng tương thích mới khả dụng.</small>
-        </div>
-
+        {{-- Ngày và giờ --}}
         <div class="row g-3">
             <div class="col-md-6">
                 <label for="starts_on" class="form-label">Ngày chiếu *</label>
+
                 <input
                     type="date"
                     id="starts_on"
@@ -94,6 +145,7 @@
 
             <div class="col-md-6">
                 <label for="starts_time" class="form-label">Giờ bắt đầu *</label>
+
                 <input
                     type="time"
                     id="starts_time"
@@ -104,26 +156,79 @@
                 >
             </div>
         </div>
+
+        {{-- Thời gian kết thúc --}}
         <div class="mt-2 mb-3">
-            <label for="ends_at" class="form-label">Thời gian kết thúc (tự tính theo thời lượng phim)</label>
-            <input type="datetime-local" id="ends_at" class="form-control" readonly>
+            <label for="ends_at" class="form-label">
+                Thời gian kết thúc (tự tính theo thời lượng phim)
+            </label>
+
+            <input
+                type="datetime-local"
+                id="ends_at"
+                class="form-control"
+                readonly
+            >
         </div>
 
+        {{-- Giá vé --}}
         <div class="row g-3 mt-1 mb-3">
             <div class="col-md-4">
-                <label for="price" class="form-label">Giá ghế thường (VNĐ) *</label>
-                <input type="number" id="price" name="price" class="form-control" min="0" max="99999999.99" step="1000" value="{{ old('price', 80000) }}" required>
+                <label for="price" class="form-label">
+                    Giá ghế thường (VNĐ) *
+                </label>
+
+                <input
+                    type="number"
+                    id="price"
+                    name="price"
+                    class="form-control"
+                    min="0"
+                    max="99999999.99"
+                    step="1000"
+                    value="{{ old('price', 80000) }}"
+                    required
+                >
             </div>
+
             <div class="col-md-4">
-                <label for="vip_price" class="form-label">Giá ghế VIP (VNĐ) *</label>
-                <input type="number" id="vip_price" name="vip_price" class="form-control" min="0" max="99999999.99" step="1000" value="{{ old('vip_price', 100000) }}" required>
+                <label for="vip_price" class="form-label">
+                    Giá ghế VIP (VNĐ) *
+                </label>
+
+                <input
+                    type="number"
+                    id="vip_price"
+                    name="vip_price"
+                    class="form-control"
+                    min="0"
+                    max="99999999.99"
+                    step="1000"
+                    value="{{ old('vip_price', 100000) }}"
+                    required
+                >
             </div>
+
             <div class="col-md-4">
-                <label for="couple_price" class="form-label">Giá ghế đôi (VNĐ) *</label>
-                <input type="number" id="couple_price" name="couple_price" class="form-control" min="0" max="99999999.99" step="1000" value="{{ old('couple_price', 160000) }}" required>
+                <label for="couple_price" class="form-label">
+                    Giá ghế đôi (VNĐ) *
+                </label>
+
+                <input
+                    type="number"
+                    id="couple_price"
+                    name="couple_price"
+                    class="form-control"
+                    min="0"
+                    max="99999999.99"
+                    step="1000"
+                    value="{{ old('couple_price', 160000) }}"
+                    required
+                >
             </div>
         </div>
 
+        {{-- Trạng thái --}}
         <div class="mb-4">
             <label class="form-label">Trạng thái *</label>
 
@@ -156,51 +261,141 @@
         </a>
     </form>
 </div>
-<script>
-    const movieDurations = @json($movies->pluck('duration', 'id'));
-    const movieSelect = document.querySelector('[name="movie_id"]');
-    const startsOnInput = document.querySelector('[name="starts_on"]');
-    const startsTimeInput = document.querySelector('[name="starts_time"]');
-    const endsInput = document.querySelector('#ends_at');
-    const roomSelect = document.querySelector('[name="room_id"]');
-    const formatSelect = document.querySelector('[name="format_id"]');
 
-    function updateCompatibleRooms() {
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const movieSelect = document.querySelector('#movie_id');
+    const roomSelect = document.querySelector('#room_id');
+    const formatSelect = document.querySelector('#format_id');
+
+    const startsOnInput = document.querySelector('#starts_on');
+    const startsTimeInput = document.querySelector('#starts_time');
+    const endsInput = document.querySelector('#ends_at');
+
+    if (
+        !movieSelect ||
+        !roomSelect ||
+        !formatSelect ||
+        !startsOnInput ||
+        !startsTimeInput ||
+        !endsInput
+    ) {
+        return;
+    }
+
+    // Lấy danh sách ID định dạng từ data-format-ids.
+    function getFormatIds(option) {
+        return (option?.dataset.formatIds || '')
+            .split(',')
+            .map(id => id.trim())
+            .filter(id => id !== '');
+    }
+
+    // Lọc định dạng theo phim đang chọn.
+    function updateMovieFormats() {
         const selectedMovie = movieSelect.selectedOptions[0];
-        const formatId = selectedMovie?.dataset.formatId || '';
-        formatSelect.value = formatId;
-        Array.from(formatSelect.options).forEach((option) => {
-            if (option.value) option.disabled = option.value !== formatId;
+        const supportedFormatIds = new Set(getFormatIds(selectedMovie));
+
+        const currentFormatId = formatSelect.value;
+        let firstSupportedFormat = '';
+
+        Array.from(formatSelect.options).forEach(option => {
+            if (!option.value) {
+                option.disabled = false;
+                option.hidden = false;
+                return;
+            }
+
+            const supported = supportedFormatIds.has(option.value);
+
+            option.disabled = !supported;
+            option.hidden = !supported;
+
+            if (supported && firstSupportedFormat === '') {
+                firstSupportedFormat = option.value;
+            }
         });
 
-        Array.from(roomSelect.options).forEach((option) => {
-            if (!option.value) return;
-            const compatible = formatId !== '' && option.dataset.formatId === formatId;
+        // Giữ định dạng hiện tại nếu phim vẫn hỗ trợ.
+        // Nếu không còn phù hợp thì chọn định dạng hợp lệ đầu tiên.
+        if (!supportedFormatIds.has(currentFormatId)) {
+            formatSelect.value = firstSupportedFormat;
+        }
+
+        updateCompatibleRooms();
+    }
+
+    // Lọc phòng theo định dạng suất chiếu đã chọn.
+    function updateCompatibleRooms() {
+        const selectedFormatId = formatSelect.value;
+
+        Array.from(roomSelect.options).forEach(option => {
+            if (!option.value) {
+                option.hidden = false;
+                option.disabled = false;
+                return;
+            }
+
+            const roomFormats = getFormatIds(option);
+            const compatible = selectedFormatId !== ''
+                && roomFormats.includes(selectedFormatId);
+
             option.hidden = !compatible;
             option.disabled = !compatible;
         });
 
+        // Bỏ chọn phòng cũ nếu phòng không còn tương thích.
         if (roomSelect.selectedOptions[0]?.disabled) {
             roomSelect.value = '';
         }
     }
 
+    // Tự tính thời gian kết thúc.
     function updateEndTime() {
-        const duration = Number(movieDurations[movieSelect.value] || 0);
-        const start = new Date(`${startsOnInput.value}T${startsTimeInput.value}`);
-        if (!duration || Number.isNaN(start.getTime())) {
+        const selectedMovie = movieSelect.selectedOptions[0];
+        const duration = Number(selectedMovie?.dataset.duration || 0);
+
+        if (!duration || !startsOnInput.value || !startsTimeInput.value) {
             endsInput.value = '';
             return;
         }
+
+        const start = new Date(
+            `${startsOnInput.value}T${startsTimeInput.value}`
+        );
+
+        if (Number.isNaN(start.getTime())) {
+            endsInput.value = '';
+            return;
+        }
+
         start.setMinutes(start.getMinutes() + duration);
-        const local = new Date(start.getTime() - start.getTimezoneOffset() * 60000);
+
+        const local = new Date(
+            start.getTime() - start.getTimezoneOffset() * 60000
+        );
+
         endsInput.value = local.toISOString().slice(0, 16);
     }
 
-    movieSelect.addEventListener('change', updateEndTime);
-    movieSelect.addEventListener('change', updateCompatibleRooms);
+    // Sự kiện thay đổi phim.
+    movieSelect.addEventListener('change', function () {
+        updateMovieFormats();
+        updateEndTime();
+    });
+
+    // Sự kiện thay đổi định dạng.
+    formatSelect.addEventListener('change', updateCompatibleRooms);
+
+    // Sự kiện thay đổi phòng.
+    // Không cần thay đổi định dạng phim khi chọn phòng.
+
     startsOnInput.addEventListener('change', updateEndTime);
     startsTimeInput.addEventListener('change', updateEndTime);
-    updateCompatibleRooms();
+
+    // Khởi tạo khi tải trang, hỗ trợ old() sau validation.
+    updateMovieFormats();
+    updateEndTime();
+});
 </script>
 @endsection

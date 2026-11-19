@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Str;
 use Endroid\QrCode\Builder\Builder;
 use Endroid\QrCode\Writer\SvgWriter;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class Booking extends Model
 {
@@ -72,4 +73,9 @@ class Booking extends Model
     {
         return $this->hasMany(BookingSeat::class);
     }
+
+    public function concessionOrder(): HasOne
+{
+    return $this->hasOne(ConcessionOrder::class);
+}
 }

@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Room extends Model
@@ -35,7 +36,7 @@ class Room extends Model
         return $this->hasMany(Seat::class);
     }
 
-    public function formats(): \Illuminate\Database\Eloquent\Relations\BelongsToMany
+    public function formats(): BelongsToMany
     {
         return $this->belongsToMany(Format::class, 'room_format');
     }

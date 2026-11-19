@@ -90,7 +90,15 @@
                         <td>{{ $movie->title }}</td>
                         <td>{{ implode(' · ', array_slice($movie->genre_labels, 0, 3)) }}</td>
                         <td>{{ $movie->duration }} phút</td>
-                        <td><span class="badge bg-info text-dark">{{ $movie->format?->name ?? 'Chưa thiết lập' }}</span></td>
+                        <td>
+    @forelse ($movie->formats as $format)
+        <span class="badge bg-info text-dark me-1 mb-1">
+            {{ $format->name }}
+        </span>
+    @empty
+        <span class="text-secondary">Chưa thiết lập</span>
+    @endforelse
+</td>
                         <td>
                             <span class="badge {{ $movie->age_rating_verified ? 'bg-success' : 'bg-warning text-dark' }}">
                                 {{ $movie->age_rating_verified ? $movie->age_rating : 'Cần xác minh' }}

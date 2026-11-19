@@ -26,9 +26,17 @@ class ShowtimeController extends Controller
             'status' => ['nullable', 'in:scheduled,cancelled'],
         ]);
 
-        $showtimes = Showtime::with(['movie.format', 'room.cinema', 'room.format', 'format'])
+        $showtimes = Showtime::with([
+            'movie.format',
+            'movie.formats',
+            'room.cinema',
+            'room.format',
+            'room.formats',
+            'format',
+        ])
             ->when(! empty($filters['search']), function ($query) use ($filters) {
                 $search = trim($filters['search']);
+
                 $query->where(function ($query) use ($search) {
                     $query->whereHas('movie', fn ($movie) => $movie->where('title', 'like', "%{$search}%"))
                         ->orWhereHas('room', fn ($room) => $room->where('name', 'like', "%{$search}%"));
@@ -46,35 +54,71 @@ class ShowtimeController extends Controller
             ->paginate(10)
             ->withQueryString();
 
-        $movies = Movie::orderBy('title')->get(['id', 'title']);
-        $cinemas = Cinema::orderBy('name')->get(['id', 'name']);
-        $rooms = Room::with('cinema')->orderBy('name')->get();
+        $movies = Movie::with('formats')
+            ->orderBy('title')
+            ->get(['id', 'title', 'format_id']);
 
-        return view('admin.showtimes.index', compact('showtimes', 'movies', 'cinemas', 'rooms', 'filters'));
+        $cinemas = Cinema::orderBy('name')->get(['id', 'name']);
+
+        $rooms = Room::with(['cinema', 'formats'])
+            ->orderBy('name')
+            ->get();
+
+        return view('admin.showtimes.index', compact(
+            'showtimes',
+            'movies',
+            'cinemas',
+            'rooms',
+            'filters'
+        ));
     }
 
     public function create()
     {
-        $movies = Movie::with('format')->where('status', '!=', 'inactive')->orderBy('title')->get();
+        $movies = Movie::with(['format', 'formats'])
+            ->where('status', '!=', 'inactive')
+            ->orderBy('title')
+            ->get();
 
-        $rooms = Room::with(['cinema', 'format'])
+        $rooms = Room::with(['cinema', 'format', 'formats'])
             ->where('is_active', true)
             ->whereHas('cinema', fn ($query) => $query->where('is_active', true))
             ->orderBy('name')
             ->get();
-        $formats = Format::whereIn('slug', ['2d', '3d', 'imax'])->where('is_active', true)->orderBy('name')->get();
 
-        return view('admin.showtimes.create', compact('movies', 'rooms', 'formats'));
+        $formats = Format::whereIn('slug', ['2d', '3d', 'imax'])
+            ->where('is_active', true)
+            ->orderBy('name')
+            ->get();
+
+        return view('admin.showtimes.create', compact(
+            'movies',
+            'rooms',
+            'formats'
+        ));
     }
 
     public function store(Request $request)
     {
         $data = $this->validateShowtime($request);
+
         DB::transaction(function () use ($data) {
-            $room = Room::whereKey($data['room_id'])->lockForUpdate()->firstOrFail();
-            $movie = Movie::whereKey($data['movie_id'])->lockForUpdate()->firstOrFail();
+            $room = Room::whereKey($data['room_id'])
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            $movie = Movie::whereKey($data['movie_id'])
+                ->lockForUpdate()
+                ->firstOrFail();
+
             $this->ensureFormatCompatibility($data, $movie, $room);
-            $this->ensureRoomIsAvailable($data['room_id'], $data['starts_at'], $data['ends_at']);
+
+            $this->ensureRoomIsAvailable(
+                $data['room_id'],
+                $data['starts_at'],
+                $data['ends_at']
+            );
+
             Showtime::create($data);
         });
 
@@ -85,10 +129,25 @@ class ShowtimeController extends Controller
 
     public function edit(Showtime $showtime)
     {
-        $movies = Movie::with('format')->where('status', '!=', 'inactive')->orderBy('title')->get();
+        $movies = Movie::with(['format', 'formats'])
+            ->where('status', '!=', 'inactive')
+            ->orderBy('title')
+            ->get();
 
-        $rooms = Room::with(['cinema', 'format'])->orderBy('name')->get();
-        $formats = Format::whereIn('slug', ['2d', '3d', 'imax'])->where('is_active', true)->orderBy('name')->get();
+        $rooms = Room::with(['cinema', 'format', 'formats'])
+            ->orderBy('name')
+            ->get();
+
+        $formats = Format::whereIn('slug', ['2d', '3d', 'imax'])
+            ->where('is_active', true)
+            ->orderBy('name')
+            ->get();
+
+        $showtime->load([
+            'movie.formats',
+            'room.formats',
+            'format',
+        ]);
 
         return view(
             'admin.showtimes.edit',
@@ -99,10 +158,20 @@ class ShowtimeController extends Controller
     public function update(Request $request, Showtime $showtime)
     {
         $data = $this->validateShowtime($request);
+
         DB::transaction(function () use ($data, $showtime) {
-            $room = Room::whereKey($data['room_id'])->lockForUpdate()->firstOrFail();
-            $movie = Movie::whereKey($data['movie_id'])->lockForUpdate()->firstOrFail();
-            $lockedShowtime = Showtime::whereKey($showtime->id)->lockForUpdate()->firstOrFail();
+            $room = Room::whereKey($data['room_id'])
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            $movie = Movie::whereKey($data['movie_id'])
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            $lockedShowtime = Showtime::whereKey($showtime->id)
+                ->lockForUpdate()
+                ->firstOrFail();
+
             if ($lockedShowtime->bookings()->exists()) {
                 throw ValidationException::withMessages([
                     'showtime' => 'Suất chiếu đã có đơn đặt vé. Không thể thay đổi phim, phòng hoặc thời gian để bảo toàn lịch sử.',
@@ -110,7 +179,14 @@ class ShowtimeController extends Controller
             }
 
             $this->ensureFormatCompatibility($data, $movie, $room);
-            $this->ensureRoomIsAvailable($data['room_id'], $data['starts_at'], $data['ends_at'], $lockedShowtime->id);
+
+            $this->ensureRoomIsAvailable(
+                $data['room_id'],
+                $data['starts_at'],
+                $data['ends_at'],
+                $lockedShowtime->id
+            );
+
             $lockedShowtime->update($data);
         });
 
@@ -122,7 +198,10 @@ class ShowtimeController extends Controller
     public function destroy(Showtime $showtime)
     {
         $action = DB::transaction(function () use ($showtime) {
-            $lockedShowtime = Showtime::whereKey($showtime->id)->lockForUpdate()->firstOrFail();
+            $lockedShowtime = Showtime::whereKey($showtime->id)
+                ->lockForUpdate()
+                ->firstOrFail();
+
             if ($lockedShowtime->bookings()->where('status', 'confirmed')->exists()) {
                 throw ValidationException::withMessages([
                     'showtime' => 'Suất chiếu có vé đã xác nhận. Hãy xử lý hoàn tiền/thông báo khách trước khi hủy.',
@@ -141,7 +220,10 @@ class ShowtimeController extends Controller
                     'status' => 'cancelled',
                     'payment_status' => 'cancelled',
                 ]);
-            $lockedShowtime->update(['status' => 'cancelled']);
+
+            $lockedShowtime->update([
+                'status' => 'cancelled',
+            ]);
 
             return 'cancelled';
         });
@@ -181,10 +263,15 @@ class ShowtimeController extends Controller
         ], [
             'starts_at' => 'thời gian bắt đầu',
         ]);
+
         unset($data['starts_on'], $data['starts_time']);
 
-        $movie = Movie::with('format')->findOrFail($data['movie_id']);
-        $room = Room::with(['cinema', 'format'])->findOrFail($data['room_id']);
+        $movie = Movie::with(['format', 'formats'])
+            ->findOrFail($data['movie_id']);
+
+        $room = Room::with(['cinema', 'format', 'formats'])
+            ->findOrFail($data['room_id']);
+
         $format = Format::findOrFail($data['format_id']);
 
         if (! $room->is_active || ! $room->cinema?->is_active) {
@@ -193,17 +280,7 @@ class ShowtimeController extends Controller
             ]);
         }
 
-        if (
-            $movie->status === 'inactive'
-            || ! $format->is_active
-            || ! in_array($format->slug, ['2d', '3d', 'imax'], true)
-            || (int) $movie->format_id !== (int) $format->id
-            || (int) $room->format_id !== (int) $format->id
-        ) {
-            throw ValidationException::withMessages([
-                'room_id' => 'Phòng chiếu phải có cùng định dạng với phim ('.$movie->format?->name.').',
-            ]);
-        }
+        $this->assertFormatSupported($movie, $room, $format);
 
         $data['ends_at'] = Carbon::parse($data['starts_at'])
             ->addMinutes((int) $movie->duration)
@@ -231,17 +308,37 @@ class ShowtimeController extends Controller
 
         if ($conflict) {
             throw ValidationException::withMessages([
-                'starts_at' =>
-                    'Phòng này đã có suất chiếu trùng thời gian. Vui lòng chọn giờ khác.',
+                'starts_at' => 'Phòng này đã có suất chiếu trùng thời gian. Vui lòng chọn giờ khác.',
             ]);
         }
     }
 
-    private function ensureFormatCompatibility(array $data, Movie $movie, Room $room): void
-    {
-        $movie->load('format');
-        $room->load(['cinema', 'format']);
-        $format = Format::whereKey($data['format_id'])->firstOrFail();
+    private function ensureFormatCompatibility(
+        array $data,
+        Movie $movie,
+        Room $room
+    ): void {
+        $movie->load(['format', 'formats']);
+        $room->load(['cinema', 'format', 'formats']);
+
+        $format = Format::whereKey($data['format_id'])
+            ->firstOrFail();
+
+        $this->assertFormatSupported($movie, $room, $format);
+    }
+
+    private function assertFormatSupported(
+        Movie $movie,
+        Room $room,
+        Format $format
+    ): void {
+        $movieSupportsFormat = $movie->formats()
+            ->whereKey($format->id)
+            ->exists();
+
+        $roomSupportsFormat = $room->formats()
+            ->whereKey($format->id)
+            ->exists();
 
         if (
             $movie->status === 'inactive'
@@ -249,11 +346,11 @@ class ShowtimeController extends Controller
             || ! in_array($format->slug, ['2d', '3d', 'imax'], true)
             || ! $room->is_active
             || ! $room->cinema?->is_active
-            || (int) $movie->format_id !== (int) $format->id
-            || (int) $room->format_id !== (int) $format->id
+            || ! $movieSupportsFormat
+            || ! $roomSupportsFormat
         ) {
             throw ValidationException::withMessages([
-                'room_id' => 'Phòng chiếu phải có cùng định dạng với phim ('.$movie->format?->name.').',
+                'room_id' => 'Phim và phòng chiếu không cùng hỗ trợ định dạng suất chiếu đã chọn.',
             ]);
         }
     }

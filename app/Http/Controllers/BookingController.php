@@ -22,6 +22,8 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
+use App\Models\ConcessionOrder;
+use App\Models\ConcessionProduct;
 
 class BookingController extends Controller
 {
@@ -128,55 +130,60 @@ class BookingController extends Controller
             'hasSelectedMovieShowtimes'
         ));
     }
-        ));
-    }
+    
 
-    private function customerScheduleQuery(array $filters): Builder
-    {
-        return Showtime::query()
-            ->where('status', 'scheduled')
-            ->where('starts_at', '>', now())
-            ->where('ends_at', '>', now())
-            ->whereHas('movie', function ($movie) use ($filters) {
-                $movie->whereIn('status', ['now_showing', 'coming_soon'])
-                    ->where('age_rating', '<>', 'C')
-                    ->when(
-                        ! empty($filters['search']),
-                        fn ($movie) => $movie->where('title', 'like', '%'.trim($filters['search']).'%')
-                    )
-                    ->when(
-                        ! empty($filters['movie_id']),
-                        fn ($movie) => $movie->whereKey($filters['movie_id'])
-                    )
-                    ->when(
-                        ! empty($filters['genre']),
-                        fn ($movie) => MovieGenres::applyFilter($movie, $filters['genre'])
-                    )
-                    ->whereColumn('movies.format_id', 'showtimes.format_id');
-            })
-            ->whereHas('format', function ($format) use ($filters) {
-                $format->where('is_active', true)
-                    ->when(
-                        ! empty($filters['format']),
-                        fn ($format) => $format->where('slug', $filters['format'])
-                    );
-            })
-            ->whereHas('room', function ($room) use ($filters) {
-                $room->where('is_active', true)
-                    ->whereColumn('rooms.format_id', 'showtimes.format_id')
-                    ->whereHas('cinema', function ($cinema) use ($filters) {
-                        $cinema->where('is_active', true)
-                            ->when(
-                                ! empty($filters['city']),
-                                fn ($cinema) => $cinema->where('city', $filters['city'])
-                            )
-                            ->when(
-                                ! empty($filters['cinema_id']),
-                                fn ($cinema) => $cinema->whereKey($filters['cinema_id'])
-                            );
-                    });
-            });
-    }
+    
+private function customerScheduleQuery(array $filters): Builder
+{
+    return Showtime::query()
+        ->where('status', 'scheduled')
+        ->where('starts_at', '>', now())
+        ->where('ends_at', '>', now())
+        ->whereHas('movie', function ($movie) use ($filters) {
+            $movie->whereIn('status', ['now_showing', 'coming_soon'])
+                ->where('age_rating', '<>', 'C')
+                ->when(
+                    ! empty($filters['search']),
+                    fn ($movie) => $movie->where('title', 'like', '%'.trim($filters['search']).'%')
+                )
+                ->when(
+                    ! empty($filters['movie_id']),
+                    fn ($movie) => $movie->whereKey($filters['movie_id'])
+                )
+                ->when(
+                    ! empty($filters['genre']),
+                    fn ($movie) => MovieGenres::applyFilter($movie, $filters['genre'])
+                )
+                ->whereHas('formats', fn ($format) =>
+                    $format->whereColumn('formats.id', 'showtimes.format_id')
+                );
+        })
+        ->whereHas('format', function ($format) use ($filters) {
+            $format->where('is_active', true)
+                ->when(
+                    ! empty($filters['format']),
+                    fn ($format) => $format->where('slug', $filters['format'])
+                );
+        })
+        ->whereHas('room', function ($room) use ($filters) {
+            $room->where('is_active', true)
+                ->whereHas('formats', fn ($format) =>
+                    $format->whereColumn('formats.id', 'showtimes.format_id')
+                )
+                ->whereHas('cinema', function ($cinema) use ($filters) {
+                    $cinema->where('is_active', true)
+                        ->when(
+                            ! empty($filters['city']),
+                            fn ($cinema) => $cinema->where('city', $filters['city'])
+                        )
+                        ->when(
+                            ! empty($filters['cinema_id']),
+                            fn ($cinema) => $cinema->whereKey($filters['cinema_id'])
+                        );
+                });
+        });
+}
+
 
     public function history(Request $request)
     {
@@ -213,7 +220,14 @@ class BookingController extends Controller
     public function selectSeats(Showtime $showtime)
     {
         $this->expirePendingHolds();
-        $showtime->load(['movie.format', 'room.cinema', 'room.format', 'format']);
+        $showtime->load([
+    'movie.formats',
+    'movie.format',
+    'room.cinema',
+    'room.formats',
+    'room.format',
+    'format',
+]);
 
         abort_unless(
             $showtime->status === 'scheduled'
@@ -227,10 +241,10 @@ class BookingController extends Controller
             && $showtime->room->is_active
             && $showtime->room->cinema?->is_active
             && ShowtimeRules::supportsFormat(
-                [(int) $showtime->movie->format_id],
-                [(int) $showtime->room->format_id],
-                (int) $showtime->format_id
-            ),
+    $showtime->movie->formats->pluck('id')->map(fn ($id) => (int) $id)->all(),
+    $showtime->room->formats->pluck('id')->map(fn ($id) => (int) $id)->all(),
+    (int) $showtime->format_id
+),
             404
         );
 
@@ -275,7 +289,14 @@ class BookingController extends Controller
             $lockedShowtime = Showtime::whereKey($showtime->id)
                 ->lockForUpdate()
                 ->firstOrFail();
-            $lockedShowtime->load(['movie.format', 'room.cinema', 'room.format', 'format']);
+            $lockedShowtime->load([
+    'movie.formats',
+    'movie.format',
+    'room.cinema',
+    'room.formats',
+    'room.format',
+    'format',
+]);
 
             if (
                 $lockedShowtime->status !== 'scheduled'
@@ -286,10 +307,10 @@ class BookingController extends Controller
                 || ! $lockedShowtime->room->is_active
                 || ! $lockedShowtime->room->cinema?->is_active
                 || ! ShowtimeRules::supportsFormat(
-                    [(int) $lockedShowtime->movie->format_id],
-                    [(int) $lockedShowtime->room->format_id],
-                    (int) $lockedShowtime->format_id
-                )
+    $lockedShowtime->movie->formats->pluck('id')->map(fn ($id) => (int) $id)->all(),
+    $lockedShowtime->room->formats->pluck('id')->map(fn ($id) => (int) $id)->all(),
+    (int) $lockedShowtime->format_id
+)
             ) {
                 abort(404);
             }
@@ -388,9 +409,9 @@ class BookingController extends Controller
                 $movie = Movie::whereKey($lockedShowtime->movie_id)
                     ->lockForUpdate()
                     ->firstOrFail()
-                    ->load('format');
+                    ->load(['formats', 'format']);
                 $lockedShowtime->load('format');
-                $room->load(['cinema', 'format']);
+                $room->load(['cinema', 'formats', 'format']);
                 if (
                     ! $room->is_active
                     || ! $room->cinema?->is_active
@@ -398,10 +419,10 @@ class BookingController extends Controller
                     || $movie->status === 'inactive'
                     || $movie->age_rating === 'C'
                     || ! ShowtimeRules::supportsFormat(
-                        [(int) $movie->format_id],
-                        [(int) $room->format_id],
-                        (int) $lockedShowtime->format_id
-                    )
+    $movie->formats->pluck('id')->map(fn ($id) => (int) $id)->all(),
+    $room->formats->pluck('id')->map(fn ($id) => (int) $id)->all(),
+    (int) $lockedShowtime->format_id
+)
                 ) {
                     throw ValidationException::withMessages([
                         'seats' => 'Suất chiếu không còn hợp lệ hoặc phòng không hỗ trợ định dạng này.',
@@ -493,8 +514,8 @@ class BookingController extends Controller
             });
 
             return redirect()
-                ->route('bookings.payment', $booking)
-                ->with('success', 'Bạn đã tạo đơn đặt vé. Vui lòng thanh toán để xác nhận vé.');
+    ->route('bookings.concessions', $booking)
+    ->with('success', 'Bạn đã giữ ghế thành công. Hãy chọn bắp nước hoặc tiếp tục thanh toán.');
         } catch (QueryException $exception) {
             if (in_array($exception->getCode(), ['23000', '23505'], true)) {
                 return back()
@@ -507,6 +528,176 @@ class BookingController extends Controller
             throw $exception;
         }
     }
+
+    public function concessions(Booking $booking)
+{
+    abort_unless($booking->user_id === auth()->id(), 403);
+
+    if ($booking->status !== 'pending') {
+        return redirect()->route('bookings.show', $booking);
+    }
+
+    if (! $booking->hold_expires_at || $booking->hold_expires_at->isPast()) {
+        $booking->update([
+            'status' => 'cancelled',
+            'payment_status' => 'cancelled',
+        ]);
+
+        return redirect()->route('bookings.show', $booking)
+            ->withErrors(['booking' => 'Thời gian giữ ghế đã hết. Vui lòng đặt lại ghế.']);
+    }
+
+    $products = ConcessionProduct::query()
+        ->where('is_active', true)
+        ->where('stock_quantity', '>', 0)
+        ->orderBy('sort_order')
+        ->orderBy('name')
+        ->get();
+
+    $booking->load([
+    'showtime.movie',
+    'showtime.room.cinema',
+    'bookingSeats.seat',
+    'concessionOrder.items',
+]);
+
+    $selectedItems = [];
+
+    if ($booking->concessionOrder) {
+        foreach ($booking->concessionOrder->items as $item) {
+            if ($item->concession_product_id) {
+                $selectedItems[$item->concession_product_id] = $item->quantity;
+            }
+        }
+    }
+
+    return view('bookings.concessions', compact(
+        'booking',
+        'products',
+        'selectedItems'
+    ));
+}
+
+public function saveConcessions(Request $request, Booking $booking)
+{
+    abort_unless($booking->user_id === auth()->id(), 403);
+
+    $validated = $request->validate([
+        'items' => ['nullable', 'array'],
+        'items.*' => ['required', 'integer', 'min:0', 'max:10'],
+    ], [
+        'items.*.integer' => 'Số lượng sản phẩm không hợp lệ.',
+        'items.*.min' => 'Số lượng không được âm.',
+        'items.*.max' => 'Mỗi sản phẩm chỉ được chọn tối đa 10.',
+    ]);
+
+    try {
+        DB::transaction(function () use ($booking, $validated) {
+            $lockedBooking = Booking::whereKey($booking->id)
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            if ($lockedBooking->user_id !== auth()->id()
+                || $lockedBooking->status !== 'pending'
+                || ! $lockedBooking->hold_expires_at
+                || $lockedBooking->hold_expires_at->isPast()) {
+                throw ValidationException::withMessages([
+                    'items' => 'Booking không còn hợp lệ hoặc thời gian giữ ghế đã hết.',
+                ]);
+            }
+
+            $quantities = collect($validated['items'] ?? [])
+                ->mapWithKeys(fn ($quantity, $id) => [(int) $id => (int) $quantity])
+                ->filter(fn ($quantity) => $quantity > 0);
+
+            $products = ConcessionProduct::query()
+                ->whereIn('id', $quantities->keys())
+                ->where('is_active', true)
+                ->lockForUpdate()
+                ->get()
+                ->keyBy('id');
+
+            if ($products->count() !== $quantities->count()) {
+                throw ValidationException::withMessages([
+                    'items' => 'Một hoặc nhiều sản phẩm không còn kinh doanh. Vui lòng tải lại trang.',
+                ]);
+            }
+
+            foreach ($quantities as $productId => $quantity) {
+                $product = $products->get($productId);
+
+                if ($product->stock_quantity < $quantity) {
+                    throw ValidationException::withMessages([
+                        'items' => "Sản phẩm {$product->name} chỉ còn {$product->stock_quantity} sản phẩm.",
+                    ]);
+                }
+            }
+
+            $seatTotal = (float) BookingSeat::where('booking_id', $lockedBooking->id)
+                ->sum('price');
+
+            $concessionSubtotal = 0;
+
+            foreach ($quantities as $productId => $quantity) {
+                $concessionSubtotal +=
+                    (float) $products->get($productId)->price * $quantity;
+            }
+
+            $lockedBooking->total_amount = $seatTotal + $concessionSubtotal;
+            $lockedBooking->save();
+
+            $existingOrder = ConcessionOrder::where('booking_id', $lockedBooking->id)
+                ->lockForUpdate()
+                ->first();
+
+            if ($quantities->isEmpty()) {
+                if ($existingOrder) {
+                    $existingOrder->items()->delete();
+                    $existingOrder->delete();
+                }
+
+                return;
+            }
+
+            $order = ConcessionOrder::updateOrCreate(
+                ['booking_id' => $lockedBooking->id],
+                [
+                    'user_id' => $lockedBooking->user_id,
+                    'order_code' => $existingOrder?->order_code
+                        ?? 'YF-FD-' . strtoupper(\Illuminate\Support\Str::random(12)),
+                    'subtotal' => $concessionSubtotal,
+                    'discount_amount' => 0,
+                    'total_amount' => $concessionSubtotal,
+                    'status' => 'pending',
+                    'payment_method' => null,
+                    'payment_status' => 'pending',
+                    'payment_reference' => null,
+                    'paid_at' => null,
+                ]
+            );
+
+            $order->items()->delete();
+
+            foreach ($quantities as $productId => $quantity) {
+                $product = $products->get($productId);
+
+                $order->items()->create([
+                    'concession_product_id' => $product->id,
+                    'product_name' => $product->name,
+                    'unit_price' => $product->price,
+                    'quantity' => $quantity,
+                    'subtotal' => (float) $product->price * $quantity,
+                ]);
+            }
+        });
+    } catch (QueryException $exception) {
+        throw $exception;
+    }
+
+    return redirect()
+        ->route('bookings.payment', $booking)
+        ->with('success', 'Đã lưu lựa chọn bắp nước. Bạn có thể thanh toán vé và bắp nước cùng lúc.');
+}
 
     public function payment(Booking $booking)
     {
@@ -537,118 +728,360 @@ class BookingController extends Controller
         return view('bookings.payment', compact('booking', 'mockPaymentEnabled'));
     }
 
-    public function cancel(Booking $booking)
-    {
-        abort_unless($booking->user_id === auth()->id(), 403);
+    
+public function cancel(Booking $booking)
+{
+    abort_unless($booking->user_id === auth()->id(), 403);
 
-        $cancelled = DB::transaction(function () use ($booking) {
-            $lockedBooking = Booking::whereKey($booking->id)->lockForUpdate()->firstOrFail();
+    $result = DB::transaction(function () use ($booking) {
+        $lockedBooking = Booking::whereKey($booking->id)
+            ->lockForUpdate()
+            ->firstOrFail();
 
-            if ($lockedBooking->status === 'pending') {
-                $lockedBooking->update([
-                    'status' => 'cancelled',
-                    'payment_status' => 'cancelled',
-                    'ticket_status' => 'cancelled',
-                ]);
-
-                return true;
-            }
-
-            if ($lockedBooking->status === 'confirmed' && $lockedBooking->payment_status === 'paid') {
-                $lockedBooking->update([
-                    'status' => 'cancelled',
-                    'payment_status' => 'refunded',
-                    'ticket_status' => 'cancelled',
-                ]);
-
-                return true;
-            }
-
-            return false;
-        });
-
-        if (! $cancelled) {
-            return redirect()->route('bookings.show', $booking)
-                ->withErrors(['booking' => 'Đơn đặt vé này không còn ở trạng thái chờ thanh toán.']);
+        if (
+            ! (
+                $lockedBooking->status === 'pending'
+                || (
+                    $lockedBooking->status === 'confirmed'
+                    && $lockedBooking->payment_status === 'paid'
+                )
+            )
+        ) {
+            return 'invalid';
         }
 
-        return redirect()->route('bookings.show', $booking)
-            ->with('success', 'Đã hủy đơn và giải phóng các ghế đang giữ.');
-    }
+        $concessionOrder = ConcessionOrder::where(
+            'booking_id',
+            $lockedBooking->id
+        )
+            ->lockForUpdate()
+            ->first();
 
-    public function processPayment(Request $request, Booking $booking)
-    {
-        abort_unless($this->mockPaymentEnabled(), 403, 'Thanh toán mô phỏng không được bật trong môi trường này.');
-        abort_unless($booking->user_id === auth()->id(), 403);
+        // Không hủy booking nếu bắp nước đã được chuẩn bị hoặc hoàn tất.
+        if (
+            $concessionOrder
+            && in_array($concessionOrder->status, ['preparing', 'completed'], true)
+        ) {
+            return 'concession_processing';
+        }
 
-        $request->validate([
-            'payment_result' => ['prohibited'],
-            'payment_status' => ['prohibited'],
-            'payment_method' => ['sometimes', 'required', Rule::in([self::MOCK_PAYMENT_METHOD])],
-        ]);
-
-        $processingResult = DB::transaction(function () use ($booking) {
-            $lockedBooking = Booking::whereKey($booking->id)
-                ->lockForUpdate()
-                ->firstOrFail();
-
-            if ($lockedBooking->status === 'confirmed' && $lockedBooking->payment_status === 'paid') {
-                return [
-                    'redirect' => route('bookings.show', $lockedBooking),
-                    'with' => ['success' => 'Booking này đã được thanh toán trước đó.'],
-                ];
-            }
-
-            if ($lockedBooking->status !== 'pending' || $lockedBooking->payment_status === 'paid') {
-                return [
-                    'redirect' => route('bookings.show', $lockedBooking),
-                    'with' => ['errors' => ['payment' => 'Booking đã bị hủy hoặc giao dịch đã được xử lý.']],
-                ];
-            }
-
-            if (! $lockedBooking->hold_expires_at || $lockedBooking->hold_expires_at->isPast()) {
-                $lockedBooking->update([
-                    'status' => 'cancelled',
-                    'payment_status' => 'timeout',
-                ]);
-
-                return [
-                    'redirect' => route('bookings.show', $lockedBooking),
-                    'with' => ['errors' => ['payment' => 'Thời gian giữ ghế đã hết. Vui lòng đặt lại ghế.']],
-                ];
-            }
-
-            $reference = $lockedBooking->payment_reference ?: 'YF-REF-' . strtoupper(\Illuminate\Support\Str::random(12));
-
+        // Booking chưa thanh toán.
+        if ($lockedBooking->status === 'pending') {
             $lockedBooking->update([
-                'payment_method' => self::MOCK_PAYMENT_METHOD,
-                'payment_reference' => $reference,
-                'payment_status' => 'paid',
-                'paid_at' => now(),
-                'status' => 'confirmed',
-                'ticket_status' => 'available',
+                'status' => 'cancelled',
+                'payment_status' => 'cancelled',
+                'ticket_status' => 'cancelled',
             ]);
 
-            $user = $lockedBooking->user()->first();
-            if ($user) {
-                $pointsEarned = max(10, (int) round((float) $lockedBooking->total_amount / 10000));
-                $user->loyalty_points = ($user->loyalty_points ?? 0) + $pointsEarned;
-                $user->member_tier = \App\Models\User::resolveMemberTier($user->loyalty_points);
-                $user->save();
+            if ($concessionOrder) {
+                $concessionOrder->update([
+                    'status' => 'cancelled',
+                    'payment_status' => 'cancelled',
+                ]);
             }
+
+            return 'cancelled';
+        }
+
+        // Booking đã thanh toán, bắp nước chưa được chuẩn bị.
+        if ($concessionOrder && $concessionOrder->status === 'confirmed') {
+            $concessionOrder->load('items');
+
+            $items = $concessionOrder->items;
+
+            // Gom số lượng theo sản phẩm.
+            $quantities = $items
+                ->filter(fn ($item) => $item->concession_product_id !== null)
+                ->groupBy('concession_product_id')
+                ->map(fn ($group) => (int) $group->sum('quantity'));
+
+            // Khóa sản phẩm theo thứ tự ID để hạn chế deadlock.
+            $products = ConcessionProduct::query()
+                ->whereIn('id', $quantities->keys())
+                ->orderBy('id')
+                ->lockForUpdate()
+                ->get()
+                ->keyBy('id');
+
+            // Hoàn lại kho.
+            foreach ($quantities as $productId => $quantity) {
+                $product = $products->get($productId);
+
+                if ($product && $quantity > 0) {
+                    $product->increment('stock_quantity', $quantity);
+                }
+            }
+
+            $concessionOrder->update([
+                'status' => 'cancelled',
+                'payment_status' => 'refunded',
+            ]);
+        } elseif ($concessionOrder) {
+            // Trường hợp đơn bắp nước không còn ở trạng thái confirmed.
+            $concessionOrder->update([
+                'status' => 'cancelled',
+                'payment_status' => 'refunded',
+            ]);
+        }
+
+        $lockedBooking->update([
+            'status' => 'cancelled',
+            'payment_status' => 'refunded',
+            'ticket_status' => 'cancelled',
+        ]);
+
+        return 'cancelled';
+    });
+
+    if ($result === 'invalid') {
+        return redirect()
+            ->route('bookings.show', $booking)
+            ->withErrors([
+                'booking' => 'Đơn đặt vé này không còn ở trạng thái có thể hủy.',
+            ]);
+    }
+
+    if ($result === 'concession_processing') {
+        return redirect()
+            ->route('bookings.show', $booking)
+            ->withErrors([
+                'booking' => 'Bắp nước đã được chuẩn bị hoặc hoàn tất. Không thể tự hủy toàn bộ đơn hàng.',
+            ]);
+    }
+
+    return redirect()
+        ->route('bookings.show', $booking)
+        ->with('success', 'Đã hủy đơn đặt vé và xử lý đơn bắp nước đi kèm.');
+}
+
+    
+public function processPayment(Request $request, Booking $booking)
+{
+    abort_unless(
+        $this->mockPaymentEnabled(),
+        403,
+        'Thanh toán mô phỏng không được bật trong môi trường này.'
+    );
+
+    abort_unless($booking->user_id === auth()->id(), 403);
+
+    $request->validate([
+        'payment_result' => ['prohibited'],
+        'payment_status' => ['prohibited'],
+        'payment_method' => [
+            'sometimes',
+            'required',
+            Rule::in([self::MOCK_PAYMENT_METHOD]),
+        ],
+    ]);
+
+    $processingResult = DB::transaction(function () use ($booking) {
+        $lockedBooking = Booking::whereKey($booking->id)
+            ->lockForUpdate()
+            ->firstOrFail();
+
+        // Không xử lý thanh toán lần thứ hai.
+        if (
+            $lockedBooking->status === 'confirmed'
+            && $lockedBooking->payment_status === 'paid'
+        ) {
+            return [
+                'redirect' => route('bookings.show', $lockedBooking),
+                'with' => [
+                    'success' => 'Booking này đã được thanh toán trước đó.',
+                ],
+            ];
+        }
+
+        if (
+            $lockedBooking->status !== 'pending'
+            || $lockedBooking->payment_status === 'paid'
+        ) {
+            return [
+                'redirect' => route('bookings.show', $lockedBooking),
+                'with' => [
+                    'errors' => [
+                        'payment' => 'Booking đã bị hủy hoặc giao dịch đã được xử lý.',
+                    ],
+                ],
+            ];
+        }
+
+        // Kiểm tra thời gian giữ ghế.
+        if (
+            ! $lockedBooking->hold_expires_at
+            || $lockedBooking->hold_expires_at->isPast()
+        ) {
+            $lockedBooking->update([
+                'status' => 'cancelled',
+                'payment_status' => 'timeout',
+                'ticket_status' => 'cancelled',
+            ]);
+
+            ConcessionOrder::where('booking_id', $lockedBooking->id)
+                ->where('payment_status', 'pending')
+                ->update([
+                    'status' => 'cancelled',
+                    'payment_status' => 'cancelled',
+                ]);
 
             return [
                 'redirect' => route('bookings.show', $lockedBooking),
-                'with' => ['success' => 'Thanh toán mô phỏng thành công. Vé đã được xác nhận và điểm tích lũy đã được cập nhật.'],
+                'with' => [
+                    'errors' => [
+                        'payment' => 'Thời gian giữ ghế đã hết. Vui lòng đặt lại ghế.',
+                    ],
+                ],
             ];
-        });
-
-        if (isset($processingResult['with']['errors'])) {
-            return redirect($processingResult['redirect'])->withErrors($processingResult['with']['errors']);
         }
 
-        return redirect($processingResult['redirect'])->with($processingResult['with']);
+        // Lấy đơn bắp nước gắn với booking.
+        $concessionOrder = ConcessionOrder::where(
+            'booking_id',
+            $lockedBooking->id
+        )
+            ->lockForUpdate()
+            ->first();
+
+        $products = collect();
+
+        if ($concessionOrder) {
+            $concessionOrder->load('items');
+
+            $items = $concessionOrder->items;
+
+            // Kiểm tra dữ liệu sản phẩm.
+            if ($items->contains(function ($item) {
+                return ! $item->concession_product_id
+                    || $item->quantity < 1;
+            })) {
+                return [
+                    'redirect' => route('bookings.payment', $lockedBooking),
+                    'with' => [
+                        'errors' => [
+                            'payment' => 'Có sản phẩm bắp nước không hợp lệ. Vui lòng kiểm tra lại đơn hàng.',
+                        ],
+                    ],
+                ];
+            }
+
+            // Gom số lượng theo ID sản phẩm.
+            $quantities = $items
+                ->groupBy('concession_product_id')
+                ->map(fn ($group) => (int) $group->sum('quantity'));
+
+            // Khóa tất cả sản phẩm theo thứ tự ID.
+            $products = ConcessionProduct::query()
+                ->whereIn('id', $quantities->keys())
+                ->orderBy('id')
+                ->lockForUpdate()
+                ->get()
+                ->keyBy('id');
+
+            // Kiểm tra toàn bộ tồn kho trước khi trừ bất kỳ sản phẩm nào.
+            foreach ($quantities as $productId => $quantity) {
+                $product = $products->get($productId);
+
+                if (
+                    ! $product
+                    || ! $product->is_active
+                    || $product->stock_quantity < $quantity
+                ) {
+                    $productName = $items
+                        ->firstWhere('concession_product_id', $productId)
+                        ?->product_name ?? 'Sản phẩm bắp nước';
+
+                    return [
+                        'redirect' => route('bookings.payment', $lockedBooking),
+                        'with' => [
+                            'errors' => [
+                                'payment' => 'Sản phẩm "' . $productName
+                                    . '" không còn đủ số lượng. Vui lòng quay lại chọn sản phẩm khác.',
+                            ],
+                        ],
+                    ];
+                }
+            }
+
+            // Tất cả sản phẩm hợp lệ mới bắt đầu trừ tồn kho.
+            foreach ($quantities as $productId => $quantity) {
+                $products->get($productId)->decrement(
+                    'stock_quantity',
+                    $quantity
+                );
+            }
+        }
+
+        // Tạo mã giao dịch chung cho vé và bắp nước.
+        $reference = $lockedBooking->payment_reference
+            ?: 'YF-REF-' . strtoupper(
+                \Illuminate\Support\Str::random(12)
+            );
+
+        // Xác nhận thanh toán booking.
+        $lockedBooking->update([
+            'payment_method' => self::MOCK_PAYMENT_METHOD,
+            'payment_reference' => $reference,
+            'payment_status' => 'paid',
+            'paid_at' => now(),
+            'status' => 'confirmed',
+            'ticket_status' => 'available',
+        ]);
+
+        // Đồng bộ trạng thái đơn bắp nước.
+        // Không tạo giao dịch thanh toán riêng.
+        if ($concessionOrder) {
+            $concessionOrder->update([
+                'status' => 'confirmed',
+                'payment_method' => self::MOCK_PAYMENT_METHOD,
+                'payment_status' => 'paid',
+                'payment_reference' => $reference,
+                'paid_at' => now(),
+            ]);
+        }
+
+        // Chỉ tính điểm thành viên dựa trên tiền vé.
+        $ticketTotal = (float) BookingSeat::where(
+            'booking_id',
+            $lockedBooking->id
+        )->sum('price');
+
+        $user = $lockedBooking->user()->first();
+
+        if ($user) {
+            $pointsEarned = max(
+                10,
+                (int) round($ticketTotal / 10000)
+            );
+
+            $user->loyalty_points = ($user->loyalty_points ?? 0)
+                + $pointsEarned;
+
+            $user->member_tier = \App\Models\User::resolveMemberTier(
+                $user->loyalty_points
+            );
+
+            $user->save();
+        }
+
+        return [
+            'redirect' => route('bookings.show', $lockedBooking),
+            'with' => [
+                'success' => 'Thanh toán thành công. Vé và bắp nước đã được xác nhận.',
+            ],
+        ];
+    });
+
+    // Xử lý kết quả transaction.
+    if (isset($processingResult['with']['errors'])) {
+        return redirect($processingResult['redirect'])
+            ->withErrors($processingResult['with']['errors']);
     }
+
+    return redirect($processingResult['redirect'])
+        ->with($processingResult['with']);
+}
+
 
     private function mockPaymentEnabled(): bool
     {
@@ -663,24 +1096,53 @@ class BookingController extends Controller
         );
 
         $booking->load([
-            'showtime.movie',
-            'showtime.room.cinema',
-            'bookingSeats.seat',
-        ]);
+    'showtime.movie',
+    'showtime.room.cinema',
+    'bookingSeats.seat',
+    'concessionOrder.items',
+]);
 
         return view('bookings.show', compact('booking'));
     }
 
-    private function expirePendingHolds(): void
-    {
-        Booking::where('status', 'pending')
+   
+private function expirePendingHolds(): void
+{
+    DB::transaction(function () {
+        // Lấy các booking đã hết thời gian giữ ghế.
+        $expiredBookings = Booking::query()
+            ->where('status', 'pending')
             ->whereNotNull('hold_expires_at')
             ->where('hold_expires_at', '<=', now())
+            ->orderBy('id')
+            ->lockForUpdate()
+            ->get(['id']);
+
+        if ($expiredBookings->isEmpty()) {
+            return;
+        }
+
+        $bookingIds = $expiredBookings->pluck('id');
+
+        // Hủy booking và giải phóng trạng thái ghế.
+        Booking::whereIn('id', $bookingIds)
+            ->where('status', 'pending')
+            ->update([
+                'status' => 'cancelled',
+                'payment_status' => 'timeout',
+                'ticket_status' => 'cancelled',
+            ]);
+
+        // Hủy các đơn bắp nước chưa thanh toán đi kèm.
+        ConcessionOrder::whereIn('booking_id', $bookingIds)
+            ->where('payment_status', 'pending')
             ->update([
                 'status' => 'cancelled',
                 'payment_status' => 'cancelled',
             ]);
-    }
+    });
+}
+
 
     private function occupiedSeatIds(int $showtimeId): array
     {
