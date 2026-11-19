@@ -15,7 +15,7 @@
         </div>
     @endif
 
-    <div class="card bg-dark text-white border-secondary mx-auto"
+    <div class="card bg-dark text-white border-secondary mx-auto cinema-panel"
          style="max-width:820px;">
         <div class="card-body p-4">
             <div class="d-flex justify-content-between align-items-start flex-wrap gap-3 mb-4">
@@ -108,6 +108,12 @@
             <div class="mt-4 d-flex flex-wrap gap-2">
                 <a href="{{ route('bookings.history') }}" class="btn btn-outline-light">Lịch sử đặt vé</a>
                 <a href="{{ route('showtimes.index') }}" class="btn btn-danger">Quay lại suất chiếu</a>
+                @if ($booking->status === 'pending')
+                    <form method="POST" action="{{ route('bookings.cancel', $booking) }}" onsubmit="return confirm('Hủy đơn đặt vé và giải phóng ghế đang giữ?')">
+                        @csrf
+                        <button type="submit" class="btn btn-outline-light">Hủy giữ ghế</button>
+                    </form>
+                @endif
             </div>
         </div>
     </div>

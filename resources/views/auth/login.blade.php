@@ -4,14 +4,13 @@
 @section('title', 'Đăng nhập - YUNFLIMS')
 
 @section('content')
-<div class="container py-5" style="max-width: 560px;">
-    <div class="p-4 p-md-5 rounded-4"
-         style="background: #1b1b22; border: 1px solid #303039;">
-
-        <h2 class="fw-bold mb-2">ĐĂNG NHẬP</h2>
-        <p class="text-secondary mb-4">
-            Chào mừng bạn trở lại YUNFLIMS.
-        </p>
+<div class="container account-shell">
+    <div class="account-card">
+        <div class="text-center mb-4">
+            <span class="hero-kicker">YUNFLIMS CINEMA</span>
+            <h1 class="mt-2 mb-2">Chào mừng trở lại</h1>
+            <p class="text-secondary mb-0">Đăng nhập để tiếp tục hành trình điện ảnh của bạn.</p>
+        </div>
 
         @if ($errors->any())
             <div class="alert alert-danger">
@@ -31,16 +30,16 @@
             @csrf
 
             <div class="mb-3">
-                <label class="form-label">Email</label>
-                <input type="email" name="email"
+                <label for="login-email" class="form-label">Email</label>
+                <input id="login-email" type="email" name="email"
                        class="form-control"
                        value="{{ old('email') }}" required
                        autocomplete="username">
             </div>
 
             <div class="mb-3">
-                <label class="form-label">Mật khẩu</label>
-                <input type="password" name="password"
+                <label for="login-password" class="form-label">Mật khẩu</label>
+                <input id="login-password" type="password" name="password"
                        class="form-control" required
                        autocomplete="current-password">
             </div>
@@ -54,7 +53,7 @@
             </div>
 
             <button class="btn btn-red w-100 py-2" type="submit">
-                ĐĂNG NHẬP
+                <i class="bi bi-box-arrow-in-right me-2"></i>Đăng nhập
             </button>
         </form>
 

@@ -11,159 +11,201 @@ use App\Models\Room;
 use App\Models\Seat;
 use App\Models\Showtime;
 use App\Services\ShowtimeRules;
+use App\Services\SingleSeatRule;
 use App\Services\TicketPriceCalculator;
+use App\Support\MovieGenres;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\QueryException;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
 class BookingController extends Controller
 {
+    private const MOCK_PAYMENT_METHOD = 'mock_test';
+
     public function index(Request $request)
     {
         $this->expirePendingHolds();
 
-        $today = now()->startOfDay();
-        $maxDate = $today->copy()->addDays(6);
+        $cities = Cinema::query()
+            ->where('is_active', true)
+            ->whereNotNull('city')
+            ->where('city', '<>', '')
+            ->distinct()
+            ->orderBy('city')
+            ->pluck('city');
+        $formats = Format::query()
+            ->where('is_active', true)
+            ->whereIn('slug', ['2d', '3d', 'imax'])
+            ->orderBy('id')
+            ->get();
+        $genres = MovieGenres::options(
+            Movie::query()
+                ->whereIn('status', ['now_showing', 'coming_soon'])
+                ->where('age_rating', '<>', 'C')
+                ->pluck('genre')
+        );
 
-        // Tạo danh sách 7 ngày tiếp theo tính từ hôm nay
-        $days = collect(range(0, 6))->map(function (int $offset) use ($today) {
-            $day = $today->copy()->addDays($offset);
-
-            return [
-                'date' => $day->toDateString(),
-                'day' => $day->format('d'),
-                'month' => $day->format('m'),
-                'date_formatted' => $day->format('d/m'),
-                'day_of_week' => match ($day->dayOfWeek) {
-                    0 => 'Chủ Nhật',
-                    1 => 'Thứ Hai',
-                    2 => 'Thứ Ba',
-                    3 => 'Thứ Tư',
-                    4 => 'Thứ Năm',
-                    5 => 'Thứ Sáu',
-                    6 => 'Thứ Bảy',
-                },
-                'day_of_week_short' => match ($day->dayOfWeek) {
-                    0 => 'CN',
-                    1 => 'T2',
-                    2 => 'T3',
-                    3 => 'T4',
-                    4 => 'T5',
-                    5 => 'T6',
-                    6 => 'T7',
-                },
-                'is_today' => $offset === 0,
-            ];
-        });
-
-        // Kiểm tra và chuẩn hóa ngày được chọn
-        $requestedDate = $request->query('date');
-        $selectedDate = $today->toDateString();
-        if ($requestedDate && is_string($requestedDate)) {
-            try {
-                $parsed = Carbon::createFromFormat('Y-m-d', $requestedDate)->startOfDay();
-                if ($parsed->greaterThanOrEqualTo($today) && $parsed->lessThanOrEqualTo($maxDate)) {
-                    $selectedDate = $parsed->toDateString();
-                }
-            } catch (\Exception $e) {
-                $selectedDate = $today->toDateString();
-            }
+        $filters = $request->validate([
+            'city' => ['nullable', 'string', Rule::in($cities->all())],
+            'cinema_id' => ['nullable', 'integer', Rule::exists('cinemas', 'id')->where('is_active', true)],
+            'date' => ['nullable', 'date', 'after_or_equal:today'],
+            'search' => ['nullable', 'string', 'max:100'],
+            'genre' => ['nullable', 'string', Rule::in($genres)],
+            'format' => ['nullable', 'string', Rule::in($formats->pluck('slug')->all())],
+            'movie_id' => ['nullable', 'integer', 'exists:movies,id'],
+        ]);
+        if (! empty($filters['city']) && ! empty($filters['cinema_id'])
+            && ! Cinema::query()->whereKey($filters['cinema_id'])->where('city', $filters['city'])->exists()) {
+            throw ValidationException::withMessages([
+                'cinema_id' => 'Rạp đã chọn không thuộc thành phố được lọc.',
+            ]);
         }
 
-        $cinemaId = $request->filled('cinema_id') ? (int) $request->query('cinema_id') : null;
-        $movieId = $request->filled('movie_id') ? (int) $request->query('movie_id') : null;
-
-        $dayStart = Carbon::parse($selectedDate)->startOfDay();
-        $dayEnd = $dayStart->copy()->endOfDay();
-        $isToday = $dayStart->isToday();
-
-        // Truy vấn suất chiếu hợp lệ cho ngày được chọn
-        $showtimeQuery = Showtime::with([
-            'movie.formats' => fn ($query) => $query->where('formats.is_active', true),
-            'room.cinema',
-            'room.formats' => fn ($query) => $query->where('formats.is_active', true),
-            'format',
-        ])
-            ->where('status', 'scheduled')
-            ->where('starts_at', '>=', $isToday ? now() : $dayStart)
-            ->where('starts_at', '<=', $dayEnd)
-            ->whereHas('movie', fn ($query) => $query->where('status', '!=', 'inactive'))
-            ->whereHas('format', fn ($query) => $query->where('is_active', true))
-            ->whereHas('room', fn ($query) => $query->where('is_active', true)
-                ->whereHas('cinema', fn ($cinema) => $cinema->where('is_active', true))
+        $baseQuery = $this->customerScheduleQuery($filters);
+        $showDates = (clone $baseQuery)
+            ->where('starts_at', '>=', now())
+            ->selectRaw('DATE(starts_at) as show_date')
+            ->distinct()
+            ->orderBy('show_date')
+            ->pluck('show_date')
+            ->map(fn ($showDate) => (string) $showDate)
+            ->values();
+        $date = $filters['date'] ?? $showDates->first() ?? now()->toDateString();
+        $showtimes = (clone $baseQuery)
+            ->with([
+                'movie.formats' => fn ($query) => $query->where('formats.is_active', true),
+                'movie.format',
+                'room.cinema',
+                'room.formats' => fn ($query) => $query->where('formats.is_active', true),
+                'room.format',
+                'room' => fn ($room) => $room->withCount([
+                    'seats as active_seats_count' => fn ($seats) => $seats->where('is_active', true),
+                ]),
+                'format',
+            ])
+            ->withCount([
+                'bookingSeats as unavailable_seats_count' => fn ($bookingSeats) => $bookingSeats
+                    ->whereHas('booking', fn ($booking) => $booking
+                        ->where('status', 'confirmed')
+                        ->orWhere(fn ($booking) => $booking
+                            ->where('status', 'pending')
+                            ->where('hold_expires_at', '>', now())),
+                    ),
+            ])
+            ->whereDate('starts_at', $date)
+            ->orderBy('starts_at')
+            ->get();
+        $cinemas = Cinema::query()
+            ->where('is_active', true)
+            ->when(
+                ! empty($filters['city']),
+                fn ($query) => $query->where('city', $filters['city'])
             )
-            ->whereHas('movie.formats', fn ($format) => $format->whereColumn('formats.id', 'showtimes.format_id'))
-            ->whereHas('room.formats', fn ($format) => $format->whereColumn('formats.id', 'showtimes.format_id'))
-            ->orderBy('starts_at');
-
-        if ($cinemaId) {
-            $showtimeQuery->whereHas('room.cinema', fn ($query) => $query->where('cinemas.id', $cinemaId));
-        }
-
-        if ($movieId) {
-            $showtimeQuery->where('movie_id', $movieId);
-        }
-
-        $showtimes = $showtimeQuery->get();
-
-        // Gom nhóm suất chiếu theo Phim -> Rạp -> Phòng & Định dạng
-        $groupedByMovie = $showtimes->groupBy('movie_id')->map(function ($movieShowtimes) {
-            $movie = $movieShowtimes->first()->movie;
-            $cinemas = $movieShowtimes->groupBy(fn ($showtime) => $showtime->room->cinema_id)->map(function ($cinemaShowtimes) {
-                $cinema = $cinemaShowtimes->first()->room->cinema;
-                $rooms = $cinemaShowtimes->groupBy(fn ($showtime) => $showtime->room_id . '-' . $showtime->format_id)->map(function ($roomShowtimes) {
-                    $first = $roomShowtimes->first();
-
-                    return [
-                        'room' => $first->room,
-                        'format' => $first->format,
-                        'showtimes' => $roomShowtimes,
-                    ];
-                });
-
-                return [
-                    'cinema' => $cinema,
-                    'rooms' => $rooms,
-                ];
-            });
-
-            return [
-                'movie' => $movie,
-                'cinemas' => $cinemas,
-                'total_showtimes' => $movieShowtimes->count(),
-            ];
-        });
-
-        // Danh sách rạp và phim đang hoạt động phục vụ bộ lọc
-        $cinemas = Cinema::where('is_active', true)->orderBy('name')->get();
-        $movies = Movie::where('status', '!=', 'inactive')->orderBy('title')->get();
+            ->orderBy('name')
+            ->get();
+        $selectedMovie = ! empty($filters['movie_id'])
+            ? Movie::query()->find($filters['movie_id'])
+            : null;
+        $hasSelectedMovieShowtimes = $selectedMovie
+            ? $this->customerScheduleQuery(['movie_id' => $selectedMovie->getKey()])->exists()
+            : false;
 
         return view('bookings.index', compact(
-            'days',
-            'selectedDate',
-            'groupedByMovie',
+            'showtimes',
+            'cities',
             'cinemas',
-            'movies',
-            'cinemaId',
-            'movieId'
+            'genres',
+            'date',
+            'showDates',
+            'formats',
+            'filters',
+            'selectedMovie',
+            'hasSelectedMovieShowtimes'
+        ));
+    }
         ));
     }
 
-    public function history()
+    private function customerScheduleQuery(array $filters): Builder
+    {
+        return Showtime::query()
+            ->where('status', 'scheduled')
+            ->where('starts_at', '>', now())
+            ->where('ends_at', '>', now())
+            ->whereHas('movie', function ($movie) use ($filters) {
+                $movie->whereIn('status', ['now_showing', 'coming_soon'])
+                    ->where('age_rating', '<>', 'C')
+                    ->when(
+                        ! empty($filters['search']),
+                        fn ($movie) => $movie->where('title', 'like', '%'.trim($filters['search']).'%')
+                    )
+                    ->when(
+                        ! empty($filters['movie_id']),
+                        fn ($movie) => $movie->whereKey($filters['movie_id'])
+                    )
+                    ->when(
+                        ! empty($filters['genre']),
+                        fn ($movie) => MovieGenres::applyFilter($movie, $filters['genre'])
+                    )
+                    ->whereColumn('movies.format_id', 'showtimes.format_id');
+            })
+            ->whereHas('format', function ($format) use ($filters) {
+                $format->where('is_active', true)
+                    ->when(
+                        ! empty($filters['format']),
+                        fn ($format) => $format->where('slug', $filters['format'])
+                    );
+            })
+            ->whereHas('room', function ($room) use ($filters) {
+                $room->where('is_active', true)
+                    ->whereColumn('rooms.format_id', 'showtimes.format_id')
+                    ->whereHas('cinema', function ($cinema) use ($filters) {
+                        $cinema->where('is_active', true)
+                            ->when(
+                                ! empty($filters['city']),
+                                fn ($cinema) => $cinema->where('city', $filters['city'])
+                            )
+                            ->when(
+                                ! empty($filters['cinema_id']),
+                                fn ($cinema) => $cinema->whereKey($filters['cinema_id'])
+                            );
+                    });
+            });
+    }
+
+    public function history(Request $request)
     {
         $this->expirePendingHolds();
 
-        $bookings = auth()->user()
+        $filters = $request->validate([
+            'status' => ['nullable', 'in:upcoming,used,cancelled,pending'],
+        ]);
+        $query = auth()->user()
             ->bookings()
             ->with([
                 'showtime.movie',
                 'showtime.room.cinema',
                 'bookingSeats.seat',
-            ])
-            ->orderByDesc('created_at')
-            ->paginate(10);
+            ]);
+
+        match ($filters['status'] ?? null) {
+            'upcoming' => $query
+                ->where('status', 'confirmed')
+                ->whereHas('showtime', fn ($showtime) => $showtime->where('ends_at', '>', now())),
+            'used' => $query
+                ->where('status', 'confirmed')
+                ->whereHas('showtime', fn ($showtime) => $showtime->where('ends_at', '<=', now())),
+            'cancelled' => $query->where('status', 'cancelled'),
+            'pending' => $query->where('status', 'pending'),
+            default => $query,
+        };
+
+        $bookings = $query->orderByDesc('created_at')->paginate(10)->withQueryString();
 
         return view('bookings.history', compact('bookings'));
     }
@@ -171,7 +213,7 @@ class BookingController extends Controller
     public function selectSeats(Showtime $showtime)
     {
         $this->expirePendingHolds();
-        $showtime->load(['movie.formats', 'room.cinema', 'room.formats', 'format']);
+        $showtime->load(['movie.format', 'room.cinema', 'room.format', 'format']);
 
         abort_unless(
             $showtime->status === 'scheduled'
@@ -180,11 +222,13 @@ class BookingController extends Controller
         );
         abort_unless(
             $showtime->format?->is_active
+            && $showtime->movie->status !== 'inactive'
+            && $showtime->movie->age_rating !== 'C'
             && $showtime->room->is_active
             && $showtime->room->cinema?->is_active
             && ShowtimeRules::supportsFormat(
-                $showtime->movie->formats->pluck('id')->all(),
-                $showtime->room->formats->pluck('id')->all(),
+                [(int) $showtime->movie->format_id],
+                [(int) $showtime->room->format_id],
                 (int) $showtime->format_id
             ),
             404
@@ -197,12 +241,16 @@ class BookingController extends Controller
 
         $bookedSeatIds = BookingSeat::where('showtime_id', $showtime->id)
             ->whereHas('booking', function ($query) {
-                $query->where('status', 'confirmed')
-                    ->orWhere(function ($query) {
-                        $query->where('status', 'pending')
-                            ->where('hold_expires_at', '>', now());
-                    });
+                $query->where('status', 'confirmed');
             })
+            ->pluck('seat_id')
+            ->all();
+        $heldSeatIds = BookingSeat::where('showtime_id', $showtime->id)
+            ->whereHas('booking', fn ($query) => $query
+                ->where('status', 'pending')
+                ->whereNotNull('hold_expires_at')
+                ->where('hold_expires_at', '>', now()))
+            ->whereNotIn('seat_id', $bookedSeatIds)
             ->pluck('seat_id')
             ->all();
 
@@ -210,16 +258,99 @@ class BookingController extends Controller
 
         return view(
             'bookings.seats',
-            compact('showtime', 'seats', 'bookedSeatIds', 'priceMap')
+            compact('showtime', 'seats', 'bookedSeatIds', 'heldSeatIds', 'priceMap')
         );
+    }
+
+    public function checkSeatSelection(
+        Request $request,
+        Showtime $showtime
+    ): JsonResponse {
+        $validated = $request->validate([
+            'seats' => ['present', 'array', 'max:10'],
+            'seats.*' => ['required', 'integer', 'distinct', 'exists:seats,id'],
+        ]);
+
+        $result = DB::transaction(function () use ($validated, $showtime) {
+            $lockedShowtime = Showtime::whereKey($showtime->id)
+                ->lockForUpdate()
+                ->firstOrFail();
+            $lockedShowtime->load(['movie.format', 'room.cinema', 'room.format', 'format']);
+
+            if (
+                $lockedShowtime->status !== 'scheduled'
+                || $lockedShowtime->starts_at->isPast()
+                || $lockedShowtime->movie->status === 'inactive'
+                || $lockedShowtime->movie->age_rating === 'C'
+                || ! $lockedShowtime->format?->is_active
+                || ! $lockedShowtime->room->is_active
+                || ! $lockedShowtime->room->cinema?->is_active
+                || ! ShowtimeRules::supportsFormat(
+                    [(int) $lockedShowtime->movie->format_id],
+                    [(int) $lockedShowtime->room->format_id],
+                    (int) $lockedShowtime->format_id
+                )
+            ) {
+                abort(404);
+            }
+
+            $selectedIds = array_map('intval', $validated['seats']);
+            $selectedSeats = Seat::whereIn('id', $selectedIds)
+                ->where('room_id', $lockedShowtime->room_id)
+                ->lockForUpdate()
+                ->get();
+
+            if ($selectedSeats->count() !== count($selectedIds)) {
+                return [
+                    'valid' => false,
+                    'message' => 'Có ghế không thuộc phòng chiếu này. Vui lòng chọn lại.',
+                    'unavailableSeats' => [],
+                    'isolatedSeatIds' => [],
+                ];
+            }
+
+            if ($selectedSeats->contains(fn (Seat $seat) => ! $seat->is_active)) {
+                return [
+                    'valid' => false,
+                    'message' => 'Một hoặc nhiều ghế đã ngừng sử dụng.',
+                    'unavailableSeats' => [],
+                    'isolatedSeatIds' => [],
+                ];
+            }
+
+            $occupiedSeatIds = $this->occupiedSeatIds($lockedShowtime->id);
+            $unavailableIds = array_values(array_intersect($selectedIds, $occupiedSeatIds));
+            if ($unavailableIds !== []) {
+                $bookedIds = BookingSeat::where('showtime_id', $lockedShowtime->id)
+                    ->whereIn('seat_id', $unavailableIds)
+                    ->whereHas('booking', fn ($query) => $query->where('status', 'confirmed'))
+                    ->pluck('seat_id')
+                    ->all();
+                $unavailableSeats = [];
+                foreach ($unavailableIds as $seatId) {
+                    $unavailableSeats[$seatId] = in_array($seatId, $bookedIds, false) ? 'booked' : 'held';
+                }
+
+                return [
+                    'valid' => false,
+                    'message' => 'Một hoặc nhiều ghế vừa được đặt hoặc đang được giữ bởi khách khác.',
+                    'unavailableSeats' => $unavailableSeats,
+                    'isolatedSeatIds' => [],
+                ];
+            }
+
+            return ['valid' => true, 'message' => null, 'unavailableSeats' => [], 'isolatedSeatIds' => []];
+        });
+
+        return response()->json($result);
     }
 
     public function store(
         Request $request,
         Showtime $showtime,
-        TicketPriceCalculator $priceCalculator
-    )
-    {
+        TicketPriceCalculator $priceCalculator,
+        SingleSeatRule $singleSeatRule
+    ) {
         $validated = $request->validate([
             'seats' => ['required', 'array', 'min:1', 'max:10'],
             'seats.*' => ['required', 'integer', 'distinct', 'exists:seats,id'],
@@ -235,7 +366,8 @@ class BookingController extends Controller
                 $validated,
                 $showtime,
                 $request,
-                $priceCalculator
+                $priceCalculator,
+                $singleSeatRule
             ) {
                 $lockedShowtime = Showtime::whereKey($showtime->id)
                     ->lockForUpdate()
@@ -256,17 +388,18 @@ class BookingController extends Controller
                 $movie = Movie::whereKey($lockedShowtime->movie_id)
                     ->lockForUpdate()
                     ->firstOrFail()
-                    ->load('formats');
+                    ->load('format');
                 $lockedShowtime->load('format');
-                $room->load(['cinema', 'formats']);
+                $room->load(['cinema', 'format']);
                 if (
                     ! $room->is_active
                     || ! $room->cinema?->is_active
                     || ! $lockedShowtime->format?->is_active
                     || $movie->status === 'inactive'
+                    || $movie->age_rating === 'C'
                     || ! ShowtimeRules::supportsFormat(
-                        $movie->formats->pluck('id')->all(),
-                        $room->formats->pluck('id')->all(),
+                        [(int) $movie->format_id],
+                        [(int) $room->format_id],
                         (int) $lockedShowtime->format_id
                     )
                 ) {
@@ -307,18 +440,29 @@ class BookingController extends Controller
                     $lockedShowtime->id
                 )
                     ->whereIn('seat_id', $validated['seats'])
-                    ->whereHas('booking', function ($query) {
-                        $query->where('status', 'confirmed')
-                            ->orWhere(function ($query) {
-                                $query->where('status', 'pending')
-                                    ->where('hold_expires_at', '>', now());
-                            });
-                    })
+                    ->whereHas('booking', fn ($query) => $query
+                        ->where('status', 'confirmed')
+                        ->orWhere(function ($query) {
+                            $query->where('status', 'pending')
+                                ->whereNotNull('hold_expires_at')
+                                ->where('hold_expires_at', '>', now());
+                        }))
                     ->exists();
 
                 if ($alreadyBooked) {
                     throw ValidationException::withMessages([
                         'seats' => 'Một hoặc nhiều ghế vừa được người khác đặt. Vui lòng chọn lại.',
+                    ]);
+                }
+
+                $occupiedSeatIds = $this->occupiedSeatIds($lockedShowtime->id);
+                $roomSeats = Seat::where('room_id', $lockedShowtime->room_id)
+                    ->orderBy('row_number')
+                    ->orderBy('seat_number')
+                    ->get();
+                if ($singleSeatRule->leavesSingleSeat($roomSeats, $occupiedSeatIds, $validated['seats'])) {
+                    throw ValidationException::withMessages([
+                        'seats' => 'Không thể đặt các vị trí đã chọn vì sẽ để lại một ghế trống duy nhất. Vui lòng chọn vị trí khác.',
                     ]);
                 }
 
@@ -331,8 +475,9 @@ class BookingController extends Controller
                     'total_amount' => $seatPrices->sum(),
                     'status' => 'pending',
                     'payment_status' => 'pending',
-                    'hold_expires_at' => now()->addMinutes(10),
+                    'hold_expires_at' => now()->addMinutes(5),
                     'qr_code' => Booking::generateQrSvg($bookingCode),
+                    'ticket_status' => 'available',
                 ]);
 
                 foreach ($seats as $seat) {
@@ -387,80 +532,127 @@ class BookingController extends Controller
             'bookingSeats.seat',
         ]);
 
-        return view('bookings.payment', compact('booking'));
+        $mockPaymentEnabled = $this->mockPaymentEnabled();
+
+        return view('bookings.payment', compact('booking', 'mockPaymentEnabled'));
+    }
+
+    public function cancel(Booking $booking)
+    {
+        abort_unless($booking->user_id === auth()->id(), 403);
+
+        $cancelled = DB::transaction(function () use ($booking) {
+            $lockedBooking = Booking::whereKey($booking->id)->lockForUpdate()->firstOrFail();
+
+            if ($lockedBooking->status === 'pending') {
+                $lockedBooking->update([
+                    'status' => 'cancelled',
+                    'payment_status' => 'cancelled',
+                    'ticket_status' => 'cancelled',
+                ]);
+
+                return true;
+            }
+
+            if ($lockedBooking->status === 'confirmed' && $lockedBooking->payment_status === 'paid') {
+                $lockedBooking->update([
+                    'status' => 'cancelled',
+                    'payment_status' => 'refunded',
+                    'ticket_status' => 'cancelled',
+                ]);
+
+                return true;
+            }
+
+            return false;
+        });
+
+        if (! $cancelled) {
+            return redirect()->route('bookings.show', $booking)
+                ->withErrors(['booking' => 'Đơn đặt vé này không còn ở trạng thái chờ thanh toán.']);
+        }
+
+        return redirect()->route('bookings.show', $booking)
+            ->with('success', 'Đã hủy đơn và giải phóng các ghế đang giữ.');
     }
 
     public function processPayment(Request $request, Booking $booking)
     {
+        abort_unless($this->mockPaymentEnabled(), 403, 'Thanh toán mô phỏng không được bật trong môi trường này.');
         abort_unless($booking->user_id === auth()->id(), 403);
 
-        $validated = $request->validate([
-            'payment_method' => ['required', 'string', 'in:card,momo,bank_transfer,cash'],
-            'test_result' => ['required', 'in:success,failed'],
-        ], [
-            'payment_method.required' => 'Vui lòng chọn phương thức thanh toán.',
-            'payment_method.in' => 'Phương thức thanh toán không hợp lệ.',
-            'test_result.required' => 'Vui lòng chọn kết quả thanh toán mô phỏng.',
-            'test_result.in' => 'Kết quả mô phỏng không hợp lệ.',
+        $request->validate([
+            'payment_result' => ['prohibited'],
+            'payment_status' => ['prohibited'],
+            'payment_method' => ['sometimes', 'required', Rule::in([self::MOCK_PAYMENT_METHOD])],
         ]);
 
-        $paymentMethod = $validated['payment_method'];
-        $result = DB::transaction(function () use ($booking, $paymentMethod, $validated) {
-            $lockedShowtime = Showtime::whereKey($booking->showtime_id)
+        $processingResult = DB::transaction(function () use ($booking) {
+            $lockedBooking = Booking::whereKey($booking->id)
                 ->lockForUpdate()
                 ->firstOrFail();
-            $lockedBooking = Booking::whereKey($booking->id)->lockForUpdate()->firstOrFail();
 
-            if ($lockedBooking->status === 'confirmed') {
-                return 'confirmed';
+            if ($lockedBooking->status === 'confirmed' && $lockedBooking->payment_status === 'paid') {
+                return [
+                    'redirect' => route('bookings.show', $lockedBooking),
+                    'with' => ['success' => 'Booking này đã được thanh toán trước đó.'],
+                ];
             }
 
-            if (
-                $lockedShowtime->status !== 'scheduled'
-                ||
-                $lockedBooking->status !== 'pending'
-                || ! $lockedBooking->hold_expires_at
-                || $lockedBooking->hold_expires_at->isPast()
-            ) {
+            if ($lockedBooking->status !== 'pending' || $lockedBooking->payment_status === 'paid') {
+                return [
+                    'redirect' => route('bookings.show', $lockedBooking),
+                    'with' => ['errors' => ['payment' => 'Booking đã bị hủy hoặc giao dịch đã được xử lý.']],
+                ];
+            }
+
+            if (! $lockedBooking->hold_expires_at || $lockedBooking->hold_expires_at->isPast()) {
                 $lockedBooking->update([
                     'status' => 'cancelled',
-                    'payment_status' => 'cancelled',
+                    'payment_status' => 'timeout',
                 ]);
 
-                return 'expired';
+                return [
+                    'redirect' => route('bookings.show', $lockedBooking),
+                    'with' => ['errors' => ['payment' => 'Thời gian giữ ghế đã hết. Vui lòng đặt lại ghế.']],
+                ];
             }
 
-            if ($validated['test_result'] === 'failed') {
-                $lockedBooking->update([
-                    'payment_status' => 'failed',
-                    'payment_method' => $paymentMethod,
-                ]);
-
-                return 'failed';
-            }
+            $reference = $lockedBooking->payment_reference ?: 'YF-REF-' . strtoupper(\Illuminate\Support\Str::random(12));
 
             $lockedBooking->update([
-                'status' => 'confirmed',
+                'payment_method' => self::MOCK_PAYMENT_METHOD,
+                'payment_reference' => $reference,
                 'payment_status' => 'paid',
-                'payment_method' => $paymentMethod,
-                'payment_reference' => 'YF-' . strtoupper(\Illuminate\Support\Str::random(16)),
                 'paid_at' => now(),
-                'hold_expires_at' => null,
+                'status' => 'confirmed',
+                'ticket_status' => 'available',
             ]);
 
-            return 'paid';
+            $user = $lockedBooking->user()->first();
+            if ($user) {
+                $pointsEarned = max(10, (int) round((float) $lockedBooking->total_amount / 10000));
+                $user->loyalty_points = ($user->loyalty_points ?? 0) + $pointsEarned;
+                $user->member_tier = \App\Models\User::resolveMemberTier($user->loyalty_points);
+                $user->save();
+            }
+
+            return [
+                'redirect' => route('bookings.show', $lockedBooking),
+                'with' => ['success' => 'Thanh toán mô phỏng thành công. Vé đã được xác nhận và điểm tích lũy đã được cập nhật.'],
+            ];
         });
 
-        if ($result === 'paid' || $result === 'confirmed') {
-            return redirect()->route('bookings.show', $booking)
-                ->with('success', 'Thanh toán mô phỏng thành công. Vé đã được xác nhận.');
+        if (isset($processingResult['with']['errors'])) {
+            return redirect($processingResult['redirect'])->withErrors($processingResult['with']['errors']);
         }
 
-        return back()->withErrors([
-            'payment_method' => $result === 'expired'
-                ? 'Thời gian giữ ghế đã hết. Vui lòng chọn lại ghế.'
-                : 'Thanh toán mô phỏng thất bại. Bạn có thể thử lại khi thời gian giữ ghế còn hiệu lực.',
-        ]);
+        return redirect($processingResult['redirect'])->with($processingResult['with']);
+    }
+
+    private function mockPaymentEnabled(): bool
+    {
+        return app()->environment(['local', 'testing']);
     }
 
     public function show(Booking $booking)
@@ -488,5 +680,20 @@ class BookingController extends Controller
                 'status' => 'cancelled',
                 'payment_status' => 'cancelled',
             ]);
+    }
+
+    private function occupiedSeatIds(int $showtimeId): array
+    {
+        return BookingSeat::where('showtime_id', $showtimeId)
+            ->whereHas('booking', fn ($query) => $query
+                ->where('status', 'confirmed')
+                ->orWhere(function ($query) {
+                    $query->where('status', 'pending')
+                        ->whereNotNull('hold_expires_at')
+                        ->where('hold_expires_at', '>', now());
+                }))
+            ->pluck('seat_id')
+            ->map(fn ($seatId) => (int) $seatId)
+            ->all();
     }
 }

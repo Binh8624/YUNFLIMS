@@ -5,14 +5,14 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Format;
 use Illuminate\Http\Request;
-use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
 class FormatController extends Controller
 {
     public function index()
     {
-        $formats = Format::withCount(['movies', 'rooms', 'showtimes'])
+        $formats = Format::whereIn('slug', ['2d', '3d', 'imax'])
+            ->withCount(['movies', 'rooms', 'showtimes'])
             ->orderBy('name')
             ->paginate(15);
 
@@ -21,61 +21,22 @@ class FormatController extends Controller
 
     public function store(Request $request)
     {
-        $data = $request->validate([
-            'name' => ['required', 'string', 'max:50', 'unique:formats,name'],
-            'is_active' => ['required', 'boolean'],
+        throw ValidationException::withMessages([
+            'name' => 'Hệ thống chỉ hỗ trợ cố định các định dạng 2D, 3D và IMAX.',
         ]);
-        $data['slug'] = Str::slug($data['name']);
-
-        if (Format::where('slug', $data['slug'])->exists()) {
-            throw ValidationException::withMessages([
-                'name' => 'Tên định dạng này có slug đã tồn tại.',
-            ]);
-        }
-
-        Format::create($data);
-
-        return back()->with('success', 'Đã thêm định dạng phim.');
     }
 
     public function update(Request $request, Format $format)
     {
-        $data = $request->validate([
-            'name' => ['required', 'string', 'max:50', 'unique:formats,name,' . $format->id],
-            'is_active' => ['required', 'boolean'],
+        throw ValidationException::withMessages([
+            'format' => 'Ba định dạng 2D, 3D và IMAX là cố định, không thể đổi tên hoặc tắt.',
         ]);
-        $data['slug'] = Str::slug($data['name']);
-
-        if (Format::where('slug', $data['slug'])->whereKeyNot($format->id)->exists()) {
-            throw ValidationException::withMessages([
-                'name' => 'Tên định dạng này có slug đã tồn tại.',
-            ]);
-        }
-
-        if (
-            ! $data['is_active']
-            && $format->showtimes()->where('status', 'scheduled')->where('starts_at', '>', now())->exists()
-        ) {
-            throw ValidationException::withMessages([
-                'is_active' => 'Không thể tắt định dạng đang được dùng cho suất chiếu tương lai; hãy hủy hoặc đổi các suất đó trước.',
-            ]);
-        }
-
-        $format->update($data);
-
-        return back()->with('success', 'Đã cập nhật định dạng phim.');
     }
 
     public function destroy(Format $format)
     {
-        if ($format->showtimes()->exists() || $format->rooms()->exists() || $format->movies()->exists()) {
-            throw ValidationException::withMessages([
-                'format' => 'Định dạng đang được sử dụng. Hãy tạm ngưng thay vì xóa.',
-            ]);
-        }
-
-        $format->delete();
-
-        return back()->with('success', 'Đã xóa định dạng phim.');
+        throw ValidationException::withMessages([
+            'format' => 'Không thể xóa định dạng hệ thống.',
+        ]);
     }
 }

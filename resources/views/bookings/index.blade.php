@@ -1,338 +1,168 @@
-@extends('layouts.app')
+﻿@extends('layouts.app')
 
-@section('title', 'Lịch Chiếu Phim - YUNFLIMS Cinema')
+@section('title', 'Lịch chiếu tổng hợp - YUNFLIMS')
 
 @section('content')
-<div class="showtimes-page">
-    <!-- Header & Hero Banner -->
-    <header class="showtimes-hero">
-        <div class="container text-center py-5">
-            <span class="badge badge-purple-subtle mb-3 px-3 py-2 text-uppercase">
-                <i class="bi bi-camera-reels me-1"></i> Hệ thống rạp chiếu YUNFLIMS
-            </span>
-            <h1 class="display-5 fw-bold text-white mb-2">LỊCH CHIẾU PHIM</h1>
-            <p class="lead hero-description mx-auto" style="max-width: 650px;">
-                Khám phá lịch chiếu và lựa chọn suất chiếu phù hợp tại các cụm rạp YUNFLIMS.
-            </p>
+<div class="container py-5 schedule-page">
+    <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-end gap-3 mb-4">
+        <div>
+            <span class="hero-kicker">LỊCH CHIẾU</span>
+            <h1 class="section-title mt-2 mb-1">Lịch chiếu tổng hợp</h1>
+            <p class="text-secondary mb-0">Lịch chiếu thực tế theo ngày, thành phố, rạp và định dạng.</p>
         </div>
-    </header>
-
-    <div class="container pb-5">
-        <!-- Thanh chọn ngày 7 ngày tiếp theo -->
-        <section class="date-selector-wrapper mb-4" aria-label="Chọn ngày chiếu">
-            <div class="date-scroll-container">
-                @foreach ($days as $day)
-                    @php
-                        $isSelected = ($day['date'] === $selectedDate);
-                        $dateUrl = route('showtimes.index', array_filter([
-                            'date' => $day['date'],
-                            'cinema_id' => $cinemaId,
-                            'movie_id' => $movieId,
-                        ]));
-                    @endphp
-                    <a href="{{ $dateUrl }}"
-                       class="date-pill {{ $isSelected ? 'active' : '' }}"
-                       aria-current="{{ $isSelected ? 'date' : 'false' }}">
-                        @if ($day['is_today'])
-                            <span class="date-badge-today">HÔM NAY</span>
-                        @else
-                            <span class="date-weekday">{{ $day['day_of_week_short'] }}</span>
-                        @endif
-                        <strong class="date-day">{{ $day['day'] }}</strong>
-                        <span class="date-month">Thg {{ $day['month'] }}</span>
-                    </a>
-                @endforeach
-            </div>
-        </section>
-
-        <!-- Thanh bộ lọc lịch chiếu (Rạp, Phim, Đặt lại) -->
-        <section class="filter-panel card border-0 mb-4" aria-label="Bộ lọc lịch chiếu">
-            <div class="card-body p-3 p-md-4">
-                <form method="GET" action="{{ route('showtimes.index') }}" class="row g-3 align-items-end" id="showtimesFilterForm">
-                    <input type="hidden" name="date" value="{{ $selectedDate }}">
-
-                    <!-- Lọc theo Rạp -->
-                    <div class="col-12 col-md-5">
-                        <label for="filterCinema" class="form-label filter-label">
-                            <i class="bi bi-geo-alt-fill text-purple me-1"></i> Rạp chiếu
-                        </label>
-                        <select id="filterCinema" name="cinema_id" class="form-select custom-dark-select" onchange="document.getElementById('showtimesFilterForm').submit()">
-                            <option value="">-- Tất cả rạp chiếu --</option>
-                            @foreach ($cinemas as $cinema)
-                                <option value="{{ $cinema->id }}" @selected($cinemaId == $cinema->id)>
-                                    {{ $cinema->name }} @if($cinema->city) ({{ $cinema->city }}) @endif
-                                </option>
-                            @endforeach
-                        </select>
-                    </div>
-
-                    <!-- Lọc theo Phim -->
-                    <div class="col-12 col-md-5">
-                        <label for="filterMovie" class="form-label filter-label">
-                            <i class="bi bi-film text-purple me-1"></i> Phim đang chiếu
-                        </label>
-                        <select id="filterMovie" name="movie_id" class="form-select custom-dark-select" onchange="document.getElementById('showtimesFilterForm').submit()">
-                            <option value="">-- Tất cả phim --</option>
-                            @foreach ($movies as $movie)
-                                <option value="{{ $movie->id }}" @selected($movieId == $movie->id)>
-                                    {{ $movie->title }}
-                                </option>
-                            @endforeach
-                        </select>
-                    </div>
-
-                    <!-- Nút thao tác -->
-                    <div class="col-12 col-md-2 d-flex gap-2">
-                        @if ($cinemaId || $movieId)
-                            <a href="{{ route('showtimes.index', ['date' => $selectedDate]) }}"
-                               class="btn btn-outline-reset w-100"
-                               title="Đặt lại bộ lọc về mặc định">
-                                <i class="bi bi-arrow-counterclockwise me-1"></i> Đặt lại
-                            </a>
-                        @else
-                            <button type="submit" class="btn btn-purple w-100">
-                                <i class="bi bi-funnel me-1"></i> Lọc
-                            </button>
-                        @endif
-                    </div>
-                </form>
-            </div>
-        </section>
-
-        <!-- Danh sách phim và suất chiếu -->
-        @if ($groupedByMovie->isNotEmpty())
-            <div class="movie-schedule-list d-flex flex-column gap-4">
-                @foreach ($groupedByMovie as $group)
-                    @php
-                        $movie = $group['movie'];
-                        $cinemasInGroup = $group['cinemas'];
-                        $ageRating = strtoupper(trim($movie->age_rating ?? 'P'));
-                        $ageBadgeClass = match ($ageRating) {
-                            'P' => 'badge-age-p',
-                            'K' => 'badge-age-k',
-                            'C13', 'T13', '13+' => 'badge-age-13',
-                            'C16', 'T16', '16+' => 'badge-age-16',
-                            'C18', 'T18', '18+' => 'badge-age-18',
-                            default => 'badge-age-p',
-                        };
-                    @endphp
-
-                    <article class="movie-schedule-card">
-                        <div class="row g-0">
-                            <!-- Cột bên trái: Poster & Thông tin tóm tắt -->
-                            <div class="col-12 col-lg-3 col-xl-3 movie-poster-column">
-                                <div class="movie-poster-box">
-                                    <img src="{{ $movie->poster ?? 'https://placehold.co/600x900/191722/7c3aed?text=' . urlencode($movie->title) }}"
-                                         alt="{{ $movie->title }}"
-                                         class="movie-poster-img"
-                                         loading="lazy">
-                                    <span class="movie-age-badge {{ $ageBadgeClass }}">
-                                        {{ $movie->age_rating ?? 'P' }}
-                                    </span>
-                                </div>
-
-                                <div class="movie-quick-meta p-3">
-                                    <!-- Tên phim trên Mobile / Tablet -->
-                                    <div class="d-flex align-items-center gap-2 mb-1 d-lg-none flex-wrap">
-                                        <span class="movie-age-badge-inline {{ $ageBadgeClass }}">
-                                            {{ $movie->age_rating ?? 'P' }}
-                                        </span>
-                                        <h2 class="h5 fw-bold mb-0">
-                                            <a href="{{ route('movies.show', $movie) }}" class="movie-title-link text-decoration-none">
-                                                {{ $movie->title }}
-                                            </a>
-                                        </h2>
-                                    </div>
-
-                                    <!-- Tên phim bên dưới poster cho Desktop -->
-                                    <div class="d-none d-lg-block mb-1">
-                                        <h3 class="h6 fw-bold mb-0">
-                                            <a href="{{ route('movies.show', $movie) }}" class="movie-title-link text-decoration-none">
-                                                {{ $movie->title }}
-                                            </a>
-                                        </h3>
-                                    </div>
-
-                                    <!-- Ngay bên dưới tên phim: Thể loại • Thời lượng (màu xám sáng #D1D5DB) -->
-                                    <div class="movie-meta-line d-flex align-items-center flex-wrap gap-1 my-2">
-                                        <span class="movie-meta-item">{{ $movie->genre }}</span>
-                                        <span class="movie-meta-separator">•</span>
-                                        <span class="movie-meta-item">{{ $movie->duration }} phút</span>
-                                    </div>
-
-                                    @if ($movie->trailer_url)
-                                        <a href="{{ $movie->trailer_url }}" target="_blank" rel="noopener noreferrer"
-                                           class="btn btn-sm btn-outline-trailer w-100 mt-1">
-                                            <i class="bi bi-play-circle-fill me-1"></i> Xem Trailer
-                                        </a>
-                                    @endif
-                                </div>
-                            </div>
-
-                            <!-- Cột bên phải: Danh sách rạp & suất chiếu -->
-                            <div class="col-12 col-lg-9 col-xl-9 movie-schedule-column">
-                                <div class="p-3 p-md-4">
-                                    <!-- Khối thông tin phim chính trên Desktop -->
-                                    <div class="movie-desktop-header d-none d-lg-block pb-3 mb-3 border-bottom border-secondary-subtle">
-                                        <div class="d-flex align-items-center gap-2 mb-2 flex-wrap">
-                                            <span class="movie-age-badge-inline {{ $ageBadgeClass }}">
-                                                {{ $movie->age_rating ?? 'P' }}
-                                            </span>
-                                            <h2 class="h4 fw-bold mb-0">
-                                                <a href="{{ route('movies.show', $movie) }}" class="movie-title-link text-decoration-none">
-                                                    {{ $movie->title }}
-                                                </a>
-                                            </h2>
-                                        </div>
-
-                                        <!-- Ngay bên dưới tên phim: Thể loại • Thời lượng (Màu xám sáng #D1D5DB, độ tương phản cao) -->
-                                        <div class="movie-meta-line d-flex align-items-center flex-wrap gap-2">
-                                            <span class="movie-meta-item">
-                                                <i class="bi bi-film text-purple me-1"></i>{{ $movie->genre }}
-                                            </span>
-                                            <span class="movie-meta-separator">•</span>
-                                            <span class="movie-meta-item">
-                                                <i class="bi bi-clock text-purple me-1"></i>{{ $movie->duration }} phút
-                                            </span>
-                                            @if ($movie->formats->isNotEmpty())
-                                                <span class="movie-meta-separator">•</span>
-                                                <span class="d-inline-flex gap-1">
-                                                    @foreach ($movie->formats as $format)
-                                                        <span class="badge badge-format-tag">{{ $format->name }}</span>
-                                                    @endforeach
-                                                </span>
-                                            @endif
-                                        </div>
-                                    </div>
-
-                                    <!-- Nhóm theo từng Rạp -->
-                                    <div class="cinema-showtimes-container d-flex flex-column gap-4">
-                                        @foreach ($cinemasInGroup as $cinemaItem)
-                                            @php
-                                                $cinema = $cinemaItem['cinema'];
-                                                $rooms = $cinemaItem['rooms'];
-                                            @endphp
-
-                                            <section class="cinema-group-block">
-                                                <div class="cinema-header mb-2 d-flex align-items-center gap-2">
-                                                    <i class="bi bi-building-fill text-purple fs-5"></i>
-                                                    <h3 class="h6 fw-bold text-uppercase mb-0 cinema-name-title">
-                                                        {{ $cinema->name }}
-                                                    </h3>
-                                                    @if ($cinema->city)
-                                                        <span class="badge badge-city-subtle small">{{ $cinema->city }}</span>
-                                                    @endif
-                                                </div>
-
-                                                @if ($cinema->address)
-                                                    <p class="cinema-address small mb-3">
-                                                        <i class="bi bi-geo-alt me-1 text-purple"></i> {{ $cinema->address }}
-                                                    </p>
-                                                @endif
-
-                                                <!-- Nhóm theo Phòng & Định dạng -->
-                                                <div class="room-schedule-list d-flex flex-column gap-3">
-                                                    @foreach ($rooms as $roomItem)
-                                                        @php
-                                                            $room = $roomItem['room'];
-                                                            $format = $roomItem['format'];
-                                                            $showtimes = $roomItem['showtimes'];
-                                                        @endphp
-
-                                                        <div class="room-schedule-item p-3">
-                                                            <div class="room-info mb-2 d-flex align-items-center justify-content-between flex-wrap gap-2">
-                                                                <div class="d-flex align-items-center gap-2">
-                                                                    <span class="room-name fw-semibold">
-                                                                        <i class="bi bi-door-open-fill text-purple me-1"></i> {{ $room->name }}
-                                                                    </span>
-                                                                    <span class="badge badge-format-pill">
-                                                                        {{ $format?->name ?? '2D' }}
-                                                                    </span>
-                                                                </div>
-                                                                <span class="room-showtime-count small">
-                                                                    {{ $showtimes->count() }} suất chiếu
-                                                                </span>
-                                                            </div>
-
-                                                            <!-- Danh sách các nút giờ chiếu -->
-                                                            <div class="showtime-pills-grid">
-                                                                @foreach ($showtimes as $showtime)
-                                                                    @php
-                                                                        $startFormatted = $showtime->starts_at->format('H:i');
-                                                                        $endTime = $showtime->ends_at
-                                                                            ? $showtime->ends_at->format('H:i')
-                                                                            : $showtime->starts_at->copy()->addMinutes($movie->duration ?: 120)->format('H:i');
-                                                                    @endphp
-
-                                                                    <a href="{{ route('bookings.seats', $showtime) }}"
-                                                                       class="showtime-slot-btn"
-                                                                       title="Chọn suất chiếu lúc {{ $startFormatted }} - Giá: {{ number_format($showtime->price) }} đ"
-                                                                       aria-label="Suất chiếu {{ $startFormatted }} đến {{ $endTime }}, giá {{ number_format($showtime->price) }} đồng">
-                                                                        <span class="slot-time">{{ $startFormatted }}</span>
-                                                                        <span class="slot-end">~ {{ $endTime }}</span>
-                                                                        <span class="slot-price">{{ number_format($showtime->price) }} đ</span>
-                                                                    </a>
-                                                                @endforeach
-                                                            </div>
-                                                        </div>
-                                                    @endforeach
-                                                </div>
-                                            </section>
-                                        @endforeach
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </article>
-                @endforeach
-            </div>
-        @else
-            <!-- Trạng thái không có suất chiếu (Empty State) -->
-            <section class="empty-state-card card border-0 text-center py-5 px-3">
-                <div class="card-body py-4">
-                    <div class="empty-icon-wrapper mb-3">
-                        <i class="bi bi-calendar2-x"></i>
-                    </div>
-                    <h2 class="h4 fw-bold text-white mb-2">Hiện chưa có suất chiếu cho ngày này</h2>
-                    <p class="empty-description mx-auto mb-4" style="max-width: 540px;">
-                        @if ($cinemaId || $movieId)
-                            Không tìm thấy suất chiếu nào phù hợp với bộ lọc bạn đã chọn trong ngày
-                            <strong>{{ \Illuminate\Support\Carbon::parse($selectedDate)->format('d/m/Y') }}</strong>.
-                        @else
-                            Hiện tại hệ thống rạp YUNFLIMS chưa có suất chiếu được xếp lịch cho ngày
-                            <strong>{{ \Illuminate\Support\Carbon::parse($selectedDate)->format('d/m/Y') }}</strong>.
-                        @endif
-                        Vui lòng chọn ngày khác hoặc thử điều chỉnh bộ lọc.
-                    </p>
-
-                    <div class="d-flex justify-content-center gap-2 flex-wrap">
-                        @if ($cinemaId || $movieId)
-                            <a href="{{ route('showtimes.index', ['date' => $selectedDate]) }}" class="btn btn-purple">
-                                <i class="bi bi-arrow-counterclockwise me-1"></i> Xóa bộ lọc
-                            </a>
-                        @endif
-
-                        @php
-                            $todayDate = now()->toDateString();
-                            $tomorrowDate = now()->addDay()->toDateString();
-                        @endphp
-
-                        @if ($selectedDate !== $todayDate)
-                            <a href="{{ route('showtimes.index', ['date' => $todayDate]) }}" class="btn btn-outline-purple">
-                                <i class="bi bi-calendar-check me-1"></i> Xem lịch Hôm Nay
-                            </a>
-                        @endif
-
-                        @if ($selectedDate !== $tomorrowDate)
-                            <a href="{{ route('showtimes.index', ['date' => $tomorrowDate]) }}" class="btn btn-outline-reset">
-                                <i class="bi bi-calendar-plus me-1"></i> Xem lịch Ngày Mai
-                            </a>
-                        @endif
-                    </div>
-                </div>
-            </section>
-        @endif
+        <a href="{{ route('movies.index') }}" class="btn btn-outline-light">
+            <i class="bi bi-film me-2" aria-hidden="true"></i>Khám phá phim
+        </a>
     </div>
+
+    @if ($selectedMovie)
+        <div class="schedule-selected-movie mb-3">
+            <span>Đang ưu tiên phim: <strong>{{ $selectedMovie->title }}</strong></span>
+            <a href="{{ route('showtimes.index', request()->except('movie_id')) }}" class="btn btn-sm btn-outline-light">Xem tất cả phim</a>
+        </div>
+    @endif
+
+    <nav class="schedule-date-strip mb-3" aria-label="Chọn ngày chiếu">
+        @foreach ($showDates as $showDate)
+            @php($day = \Illuminate\Support\Carbon::parse($showDate))
+            @php($weekdays = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'])
+            <a
+                href="{{ route('showtimes.index', array_merge(request()->query(), ['date' => $showDate])) }}"
+                class="schedule-date-option {{ $showDate === $date ? 'active' : '' }}"
+                @if ($showDate === $date) aria-current="date" @endif
+            >
+                <small>{{ $day->isToday() ? 'Hôm nay' : $weekdays[$day->dayOfWeek] }}</small>
+                <strong>{{ $day->format('d') }}</strong>
+                <span>{{ $day->format('m/Y') }}</span>
+            </a>
+        @endforeach
+        @if ($showDates->isEmpty())
+            <span class="text-secondary px-3 py-2">Chưa có ngày chiếu nào được công bố.</span>
+        @endif
+    </nav>
+
+    <form method="GET" action="{{ route('showtimes.index') }}" class="schedule-filter cinema-panel p-3 p-lg-4 mb-4">
+        <input type="hidden" name="date" value="{{ $date }}">
+        @if ($filters['movie_id'] ?? null)
+            <input type="hidden" name="movie_id" value="{{ $filters['movie_id'] }}">
+        @endif
+        <div class="row g-3 align-items-end">
+            <div class="col-12 col-md-6 col-xl-2">
+                <label for="schedule-search" class="form-label">Tìm phim</label>
+                <input id="schedule-search" type="search" name="search" value="{{ request('search') }}" class="form-control" placeholder="Tên phim...">
+            </div>
+            <div class="col-6 col-md-3 col-xl-2">
+                <label for="schedule-city" class="form-label">Thành phố</label>
+                <select id="schedule-city" name="city" class="form-select" data-schedule-city>
+                    <option value="">Tất cả thành phố</option>
+                    @foreach ($cities as $city)
+                        <option value="{{ $city }}" @selected(($filters['city'] ?? '') === $city)>{{ $city }}</option>
+                    @endforeach
+                </select>
+            </div>
+            <div class="col-6 col-md-3 col-xl-2">
+                <label for="schedule-cinema" class="form-label">Cụm rạp</label>
+                <select id="schedule-cinema" name="cinema_id" class="form-select">
+                    <option value="">Tất cả rạp</option>
+                    @foreach ($cinemas as $cinema)
+                        <option value="{{ $cinema->id }}" @selected((string) ($filters['cinema_id'] ?? '') === (string) $cinema->id)>{{ $cinema->name }}</option>
+                    @endforeach
+                </select>
+            </div>
+            <div class="col-6 col-md-3 col-xl-2">
+                <label for="schedule-format" class="form-label">Định dạng</label>
+                <select id="schedule-format" name="format" class="form-select">
+                    <option value="">Tất cả định dạng</option>
+                    @foreach ($formats as $format)
+                        <option value="{{ $format->slug }}" @selected(($filters['format'] ?? '') === $format->slug)>{{ $format->name }}</option>
+                    @endforeach
+                </select>
+            </div>
+            <div class="col-6 col-md-3 col-xl-2">
+                <label for="schedule-genre" class="form-label">Thể loại</label>
+                <select id="schedule-genre" name="genre" class="form-select">
+                    <option value="">Tất cả</option>
+                    @foreach ($genres as $genre)
+                        <option value="{{ $genre }}" @selected(($filters['genre'] ?? '') === $genre)>{{ $genre }}</option>
+                    @endforeach
+                </select>
+            </div>
+            <div class="col-12 col-md-3 col-xl-2">
+                <button class="btn btn-red w-100" type="submit" aria-label="Lọc lịch chiếu"><i class="bi bi-funnel" aria-hidden="true"></i><span class="d-xl-none ms-2">Lọc</span></button>
+            </div>
+        </div>
+    </form>
+
+    @forelse ($showtimes->groupBy(fn ($showtime) => $showtime->room->cinema->id) as $cinemaShowtimes)
+        @php($cinema = $cinemaShowtimes->first()->room->cinema)
+        <section class="schedule-cinema-card mb-3" aria-label="Lịch chiếu tại {{ $cinema->name }}">
+            <header class="schedule-cinema-heading">
+                <div class="schedule-cinema-icon" aria-hidden="true"><i class="bi bi-building"></i></div>
+                <div>
+                    <h2>{{ $cinema->name }}</h2>
+                    <p class="mb-0">{{ $cinema->address }} · {{ $cinema->city }}</p>
+                </div>
+            </header>
+
+            @foreach ($cinemaShowtimes->groupBy('movie_id') as $movieShowtimes)
+                @php($movie = $movieShowtimes->first()->movie)
+                <article class="schedule-movie">
+                    <img src="{{ $movie->poster ?? 'https://placehold.co/600x900/1b1b22/e50914?text=YUNFLIMS' }}" alt="{{ $movie->title }}" loading="lazy">
+                    <div class="schedule-movie-content">
+                        <div class="schedule-movie-heading">
+                            <div>
+                                <h3><a href="{{ route('movies.show', $movie) }}">{{ $movie->title }}</a></h3>
+                                <div class="schedule-movie-meta">
+                                    <span>{{ implode(' · ', array_slice($movie->genre_labels, 0, 3)) }}</span>
+                                    @if ($movie->duration)<span>{{ $movie->duration }} phút</span>@endif
+                                    <span class="badge {{ $movie->age_rating_verified ? 'bg-success' : 'bg-warning text-dark' }}" title="{{ $movie->age_rating_verified ? 'Phân loại đã xác minh' : 'Phân loại đang chờ xác minh' }}">{{ $movie->ageRatingLabel() }}</span>
+                                </div>
+                            </div>
+                            <span class="badge badge-red">{{ $movie->format?->name ?? 'Định dạng chưa cập nhật' }}</span>
+                        </div>
+
+                        @foreach ($movieShowtimes->groupBy(fn ($showtime) => $showtime->room_id.'-'.$showtime->format_id) as $roomShowtimes)
+                            @php($firstShowtime = $roomShowtimes->first())
+                            <div class="schedule-room">
+                                <div class="schedule-room-heading">
+                                    <strong>{{ $firstShowtime->room->name }}</strong>
+                                    <span>{{ $firstShowtime->room->format?->name ?? 'Chưa thiết lập định dạng' }}</span>
+                                </div>
+                                <div class="schedule-time-list">
+                                    @foreach ($roomShowtimes as $showtime)
+                                        @php($hasSeats = $showtime->room->active_seats_count > 0 && $showtime->unavailable_seats_count < $showtime->room->active_seats_count)
+                                        @if ($hasSeats)
+                                            <a href="{{ route('bookings.seats', $showtime) }}" class="schedule-time" aria-label="{{ $movie->title }}, {{ $showtime->starts_at->format('d/m H:i') }}, {{ $firstShowtime->room->name }}">
+                                                <strong>{{ $showtime->starts_at->format('H:i') }}</strong>
+                                                <small>{{ $showtime->format?->name }}</small>
+                                            </a>
+                                        @else
+                                            <span class="schedule-time is-unavailable" aria-label="Suất {{ $showtime->starts_at->format('H:i') }} đã hết ghế hoặc chưa có sơ đồ ghế">
+                                                <strong>{{ $showtime->starts_at->format('H:i') }}</strong>
+                                                <small>Hết ghế</small>
+                                            </span>
+                                        @endif
+                                    @endforeach
+                                </div>
+                            </div>
+                        @endforeach
+                    </div>
+                </article>
+            @endforeach
+        </section>
+    @empty
+        <div class="cinema-panel p-4 p-md-5 text-center">
+            <i class="bi bi-calendar-x feature-icon" aria-hidden="true"></i>
+            @if ($selectedMovie && ! $hasSelectedMovieShowtimes)
+                <h2 class="h4 mt-3">Hiện chưa có lịch chiếu cho bộ phim này. Vui lòng quay lại sau.</h2>
+                <p class="text-secondary mb-3">Bạn có thể xem lịch chiếu của các phim khác trong hệ thống.</p>
+            @else
+                <h2 class="h4 mt-3">Chưa có suất chiếu phù hợp</h2>
+                <p class="text-secondary mb-3">Không có lịch chiếu thực tế khớp với các bộ lọc đã chọn. Hãy thử ngày hoặc rạp khác.</p>
+            @endif
+            <a href="{{ route('showtimes.index') }}" class="btn btn-outline-light">Xóa bộ lọc</a>
+        </div>
+    @endforelse
 </div>
 
 <style>

@@ -4,14 +4,13 @@
 @section('title', 'Đăng ký - YUNFLIMS')
 
 @section('content')
-<div class="container py-5" style="max-width: 560px;">
-    <div class="p-4 p-md-5 rounded-4"
-         style="background: #1b1b22; border: 1px solid #303039;">
-
-        <h2 class="fw-bold mb-2">TẠO TÀI KHOẢN</h2>
-        <p class="text-secondary mb-4">
-            Tham gia YUNFLIMS để trải nghiệm điện ảnh.
-        </p>
+<div class="container account-shell">
+    <div class="account-card">
+        <div class="text-center mb-4">
+            <span class="hero-kicker">THÀNH VIÊN YUNFLIMS</span>
+            <h1 class="mt-2 mb-2">Tạo tài khoản</h1>
+            <p class="text-secondary mb-0">Lưu lại vé và quản lý trải nghiệm xem phim của bạn.</p>
+        </div>
 
         @if ($errors->any())
             <div class="alert alert-danger">
@@ -27,24 +26,24 @@
             @csrf
 
             <div class="mb-3">
-                <label class="form-label">Họ và tên</label>
-                <input type="text" name="name"
+                <label for="register-name" class="form-label">Họ và tên</label>
+                <input id="register-name" type="text" name="name"
                        class="form-control"
                        value="{{ old('name') }}" required
                        autocomplete="name">
             </div>
 
             <div class="mb-3">
-                <label class="form-label">Email</label>
-                <input type="email" name="email"
+                <label for="register-email" class="form-label">Email</label>
+                <input id="register-email" type="email" name="email"
                        class="form-control"
                        value="{{ old('email') }}" required
                        autocomplete="email">
             </div>
 
             <div class="mb-3">
-                <label class="form-label">Mật khẩu</label>
-                <input type="password" name="password"
+                <label for="register-password" class="form-label">Mật khẩu</label>
+                <input id="register-password" type="password" name="password"
                        class="form-control" required
                        minlength="8" autocomplete="new-password">
                 <small class="text-secondary">
@@ -53,14 +52,14 @@
             </div>
 
             <div class="mb-4">
-                <label class="form-label">Xác nhận mật khẩu</label>
-                <input type="password" name="password_confirmation"
+                <label for="register-password-confirmation" class="form-label">Xác nhận mật khẩu</label>
+                <input id="register-password-confirmation" type="password" name="password_confirmation"
                        class="form-control" required
                        autocomplete="new-password">
             </div>
 
             <button class="btn btn-red w-100 py-2" type="submit">
-                ĐĂNG KÝ
+                <i class="bi bi-person-plus me-2"></i>Tạo tài khoản
             </button>
         </form>
 

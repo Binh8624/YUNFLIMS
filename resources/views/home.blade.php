@@ -1,102 +1,265 @@
 @extends('layouts.app')
 
-@section('title', 'YUNFLIMS Cinema - Đặt vé xem phim')
+@section('title', 'YUNFLIMS Cinema - Phim hay, đặt vé nhanh')
 
 @section('content')
-<section class="hero">
-    <div class="container">
-        <div class="hero-content">
-            <span class="badge badge-red mb-3 px-3 py-2">PHIM NỔI BẬT</span>
-            <h1 class="display-4 fw-bold mb-3">
-                THẾ GIỚI ĐIỆN ẢNH<br>
-                <span style="color: #e50914;">TRONG TẦM TAY</span>
-            </h1>
-            <p class="text-light mb-4">
-                Khám phá những bộ phim hấp dẫn, chọn suất chiếu phù hợp và đặt chỗ ngay để trải nghiệm điện ảnh trọn vẹn.
-            </p>
-            <div class="d-flex flex-wrap gap-3">
-                <a href="#movies" class="btn btn-red btn-lg">Khám phá phim</a>
-                <a href="{{ route('showtimes.index') }}" class="btn btn-outline-light btn-lg">Lịch chiếu</a>
-            </div>
-        </div>
-    </div>
-</section>
-
-<section class="container py-5" id="movies">
-    <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
-        <div>
-            <h2 class="section-title mb-0">TÌM PHIM YÊU THÍCH</h2>
-        </div>
-        <form method="GET" action="{{ route('home') }}" class="d-flex gap-2 flex-wrap">
-            <input type="text" name="search" value="{{ request('search') }}" class="form-control" placeholder="Tìm phim, thể loại..." style="min-width: 220px;">
-            <select name="status" class="form-select" style="max-width: 170px;">
-                <option value="">Tất cả trạng thái</option>
-                <option value="now_showing" {{ request('status') === 'now_showing' ? 'selected' : '' }}>Đang chiếu</option>
-                <option value="coming_soon" {{ request('status') === 'coming_soon' ? 'selected' : '' }}>Sắp chiếu</option>
-            </select>
-            <button type="submit" class="btn btn-red">Tìm kiếm</button>
-        </form>
-    </div>
-
-    @if ($featured->isNotEmpty())
-        <div class="mb-5">
-            <div class="d-flex align-items-center justify-content-between mb-3">
-                <h3 class="mb-0 text-white">Phim nổi bật</h3>
-            </div>
-            <div class="row g-4">
-                @foreach ($featured as $movie)
-                    <div class="col-6 col-md-4 col-lg-3">
-                        @include('partials.movie-card', ['movie' => $movie])
-                    </div>
-                @endforeach
-            </div>
-        </div>
-    @endif
-
-    <div class="d-flex justify-content-between align-items-center mb-3">
-        <h3 class="mb-0 text-white">Danh sách phim</h3>
-        <span class="text-secondary small">{{ $movies->count() }} phim</span>
-    </div>
-
-    @if ($movies->isEmpty())
-        <div class="alert alert-secondary border-0">
-            Không tìm thấy phim phù hợp. Hãy thử từ khóa hoặc trạng thái khác.
-        </div>
-    @else
-        <div class="row g-4">
-            @foreach ($movies as $movie)
-                <div class="col-6 col-md-4 col-lg-3">
-                    @include('partials.movie-card', ['movie' => $movie])
+<div class="home-page">
+    <section class="cinema-hero" aria-label="Phim nổi bật">
+        <div
+            id="featuredMovies"
+            class="carousel slide carousel-fade"
+            data-home-carousel
+            aria-label="Phim nổi bật"
+        >
+            @if ($featured->count() > 1)
+                <div class="carousel-indicators">
+                    @foreach ($featured as $index => $movie)
+                        <button
+                            type="button"
+                            data-bs-target="#featuredMovies"
+                            data-bs-slide-to="{{ $index }}"
+                            class="{{ $loop->first ? 'active' : '' }}"
+                            @if ($loop->first) aria-current="true" @endif
+                            aria-label="Phim nổi bật {{ $loop->iteration }}"
+                        ></button>
+                    @endforeach
                 </div>
-            @endforeach
-        </div>
-    @endif
+            @endif
 
-    @if ($comingSoon->isNotEmpty())
-        <div class="mt-5">
-            <h3 class="mb-3 text-white">Sắp chiếu</h3>
-            <div class="row g-4">
-                @foreach ($comingSoon as $movie)
-                    <div class="col-6 col-md-4 col-lg-3">
-                        @include('partials.movie-card', ['movie' => $movie])
+            <div class="carousel-inner">
+                @forelse ($featured as $movie)
+                    <article class="carousel-item {{ $loop->first ? 'active' : '' }}">
+                        <img
+                            class="hero-backdrop"
+                            src="{{ $movie->poster }}"
+                            alt=""
+                            @if ($loop->first) fetchpriority="high" @else loading="lazy" @endif
+                        >
+                        <div class="container">
+                            <div class="hero-content">
+                                <span class="hero-kicker">PHIM NỔI BẬT</span>
+                                <h1>{{ $movie->title }}</h1>
+                                @if ($movie->description)
+                                    <p class="hero-description mb-3">{{ $movie->description }}</p>
+                                @endif
+                                <div class="hero-meta" aria-label="Thông tin phim">
+                                    @if ($movie->genre_labels)
+                                        <span><i class="bi bi-film" aria-hidden="true"></i>{{ implode(' · ', array_slice($movie->genre_labels, 0, 3)) }}</span>
+                                    @endif
+                                    @if ($movie->duration)
+                                        <span><i class="bi bi-clock" aria-hidden="true"></i>{{ $movie->duration }} phút</span>
+                                    @endif
+                                    <span><i class="bi bi-badge-3d" aria-hidden="true"></i>{{ $movie->format?->name ?? 'Định dạng chưa cập nhật' }}</span>
+                                    <span><i class="bi bi-person-badge" aria-hidden="true"></i>{{ $movie->ageRatingLabel() }}</span>
+                                    @if ($movie->reviews_count > 0)
+                                        <span><i class="bi bi-star-fill" aria-hidden="true"></i>{{ number_format((float) $movie->reviews_avg_rating, 1) }}/5</span>
+                                    @endif
+                                </div>
+                                <div class="hero-actions">
+                                    <a href="{{ route('showtimes.index', ['movie_id' => $movie->id]) }}" class="btn btn-red">
+                                        <i class="bi bi-ticket-perforated me-2" aria-hidden="true"></i>Đặt vé ngay
+                                    </a>
+                                    <a href="{{ route('movies.show', $movie) }}" class="btn btn-outline-light">
+                                        Xem chi tiết
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    </article>
+                @empty
+                    <div class="carousel-item active">
+                        <div class="container">
+                            <div class="hero-content">
+                                <span class="hero-kicker">YUNFLIMS CINEMA</span>
+                                <h1>Sẵn sàng cho bộ phim tiếp theo?</h1>
+                                <p class="hero-description">Khám phá các phim đang chiếu và chọn suất phù hợp với bạn.</p>
+                                <div class="hero-actions">
+                                    <a href="{{ route('movies.index') }}" class="btn btn-red">Khám phá phim</a>
+                                    <a href="{{ route('showtimes.index') }}" class="btn btn-outline-light">Xem lịch chiếu</a>
+                                </div>
+                            </div>
+                        </div>
                     </div>
+                @endforelse
+            </div>
+
+            @if ($featured->count() > 1)
+                <button class="carousel-control-prev" type="button" data-bs-target="#featuredMovies" data-bs-slide="prev" aria-label="Phim nổi bật trước">
+                    <span class="carousel-control-prev-icon" aria-hidden="true"></span>
+                </button>
+                <button class="carousel-control-next" type="button" data-bs-target="#featuredMovies" data-bs-slide="next" aria-label="Phim nổi bật tiếp theo">
+                    <span class="carousel-control-next-icon" aria-hidden="true"></span>
+                </button>
+            @endif
+        </div>
+    </section>
+
+    <section class="container home-hot-section" aria-labelledby="hot-movies-title">
+        <div class="home-section-heading">
+            <div>
+                <span class="hero-kicker">ĐƯỢC QUAN TÂM TẠI YUNFLIMS</span>
+                <h2 class="section-title mt-2 mb-0" id="hot-movies-title">Phim hot</h2>
+            </div>
+            <a href="{{ route('movies.index', ['status' => 'now_showing']) }}" class="btn btn-outline-light btn-sm">
+                Khám phá phim <i class="bi bi-arrow-right ms-1" aria-hidden="true"></i>
+            </a>
+        </div>
+        @if ($featured->isEmpty())
+            <div class="cinema-panel home-empty-state">
+                <i class="bi bi-stars" aria-hidden="true"></i>
+                <span>Phim nổi bật sẽ xuất hiện khi có dữ liệu đặt vé/đánh giá hoặc được quản trị viên chọn.</span>
+                <a href="{{ route('showtimes.index') }}">Xem lịch chiếu</a>
+            </div>
+        @else
+            <div class="home-movies-grid home-hot-grid">
+                @foreach ($featured as $movie)
+                    <div>@include('partials.movie-card', ['movie' => $movie])</div>
                 @endforeach
             </div>
-        </div>
-    @endif
-</section>
+        @endif
+    </section>
 
-<section class="container py-5" id="services">
-    <div class="p-4 p-md-5 rounded-4" style="background: linear-gradient(120deg, #501016, #211116);">
-        <div class="row align-items-center g-3">
-            <div class="col-md-8">
-                <h2 class="fw-bold">SẴN SÀNG CHO SUẤT PHIM TIẾP THEO?</h2>
-                <p class="mb-0 text-light">Khám phá danh sách phim và lên kế hoạch cho buổi xem phim cùng YUNFLIMS.</p>
+    <section class="container home-now-showing" id="movies" aria-labelledby="now-showing-title">
+        <div class="home-section-heading">
+            <div>
+                <span class="hero-kicker">CHỌN PHIM, ĐẶT CHỖ</span>
+                <h2 class="section-title mt-2 mb-0" id="now-showing-title">Phim đang chiếu</h2>
             </div>
-            <div class="col-md-4 text-md-end">
-                <a href="#movies" class="btn btn-light btn-lg fw-bold">Xem danh sách phim</a>
+            <div class="home-section-actions">
+                <form method="GET" action="{{ route('movies.index') }}" class="home-search" role="search">
+                    <label class="visually-hidden" for="home-movie-search">Tìm phim</label>
+                    <input
+                        id="home-movie-search"
+                        type="search"
+                        name="search"
+                        class="form-control"
+                        placeholder="Tìm phim..."
+                    >
+                    <button class="btn" type="submit" aria-label="Tìm phim">
+                        <i class="bi bi-search" aria-hidden="true"></i>
+                    </button>
+                </form>
+                <a href="{{ route('movies.index') }}" class="btn btn-outline-light btn-sm">
+                    Xem tất cả <i class="bi bi-arrow-right ms-1" aria-hidden="true"></i>
+                </a>
             </div>
         </div>
-    </div>
-</section>
+
+        @if ($movies->isEmpty())
+            <div class="cinema-panel home-empty-state">
+                <i class="bi bi-film" aria-hidden="true"></i>
+                <span>Hiện chưa có phim đang chiếu để hiển thị.</span>
+                <a href="{{ route('showtimes.index') }}">Xem lịch chiếu</a>
+            </div>
+        @else
+            <div class="home-movies-grid">
+                @foreach ($movies as $movie)
+                    <article class="home-movie-card">
+                        <a
+                            href="{{ route('movies.show', $movie) }}"
+                            class="home-movie-poster"
+                            aria-label="Xem chi tiết phim {{ $movie->title }}"
+                        >
+                            <img src="{{ $movie->poster }}" alt="{{ $movie->title }}" loading="lazy">
+                            <span class="home-movie-rating">{{ $movie->ageRatingLabel() }}</span>
+                        </a>
+                        <div class="home-movie-info">
+                            <h3 class="home-movie-title">
+                                <a href="{{ route('movies.show', $movie) }}">{{ $movie->title }}</a>
+                            </h3>
+                            <p class="home-movie-meta">
+                                @if ($movie->genre_labels)
+                                    <span>{{ implode(' · ', array_slice($movie->genre_labels, 0, 2)) }}</span>
+                                @endif
+                                @if ($movie->duration)
+                                    <span>{{ $movie->duration }} phút</span>
+                                @endif
+                                <span>{{ $movie->format?->name ?? 'Định dạng chưa cập nhật' }}</span>
+                                @if ($movie->reviews_count > 0)
+                                    <span class="home-movie-score"><i class="bi bi-star-fill" aria-hidden="true"></i> {{ number_format((float) $movie->reviews_avg_rating, 1) }}</span>
+                                @endif
+                            </p>
+                            <div class="home-movie-actions">
+                                <a href="{{ route('movies.show', $movie) }}" class="btn btn-outline-light">Chi tiết</a>
+                                <a href="{{ route('showtimes.index', ['movie_id' => $movie->id]) }}" class="btn btn-red">Đặt vé</a>
+                            </div>
+                        </div>
+                    </article>
+                @endforeach
+            </div>
+        @endif
+    </section>
+
+    <section class="container home-upcoming-section" id="coming-soon" aria-labelledby="coming-soon-title">
+        <div class="home-section-heading">
+            <div>
+                <span class="hero-kicker">SẮP RA MẮT</span>
+                <h2 class="section-title mt-2 mb-0" id="coming-soon-title">Phim sắp chiếu</h2>
+            </div>
+            <a href="{{ route('movies.index', ['status' => 'coming_soon']) }}" class="btn btn-outline-light btn-sm">
+                Xem tất cả <i class="bi bi-arrow-right ms-1" aria-hidden="true"></i>
+            </a>
+        </div>
+
+        @if ($comingSoon->isEmpty())
+            <div class="cinema-panel home-empty-state">
+                <i class="bi bi-calendar-event" aria-hidden="true"></i>
+                <span>Hiện chưa có phim sắp chiếu được cập nhật.</span>
+                <a href="{{ route('movies.index') }}">Khám phá phim</a>
+            </div>
+        @else
+            <div class="home-movies-grid home-upcoming-grid">
+                @foreach ($comingSoon as $movie)
+                    <article class="home-movie-card home-upcoming-card">
+                        <a
+                            href="{{ route('movies.show', $movie) }}"
+                            class="home-movie-poster"
+                            aria-label="Xem chi tiết phim {{ $movie->title }}"
+                        >
+                            <img src="{{ $movie->poster }}" alt="{{ $movie->title }}" loading="lazy">
+                            <span class="home-movie-rating">{{ $movie->ageRatingLabel() }}</span>
+                        </a>
+                        <div class="home-movie-info">
+                            <h3 class="home-movie-title">
+                                <a href="{{ route('movies.show', $movie) }}">{{ $movie->title }}</a>
+                            </h3>
+                            <p class="home-movie-meta home-release-date">
+                                @if ($movie->genre_labels)
+                                    <span>{{ implode(' · ', array_slice($movie->genre_labels, 0, 2)) }}</span>
+                                @endif
+                                <span class="badge bg-secondary">{{ $movie->format?->name ?? 'Định dạng chưa cập nhật' }}</span>
+                                <i class="bi bi-calendar3" aria-hidden="true"></i>
+                                Ngày khởi chiếu đang cập nhật
+                            </p>
+                            <div class="home-movie-actions">
+                                <a href="{{ route('movies.show', $movie) }}" class="btn btn-outline-light">Xem chi tiết</a>
+                            </div>
+                        </div>
+                    </article>
+                @endforeach
+            </div>
+        @endif
+    </section>
+
+    <section class="container home-promotions-section" id="promotions" aria-labelledby="promotions-title">
+        <div class="home-section-heading">
+            <div>
+                <span class="hero-kicker">ƯU ĐÃI YUNFLIMS</span>
+                <h2 class="section-title mt-2 mb-0" id="promotions-title">Khuyến mãi nổi bật</h2>
+            </div>
+        </div>
+        <div class="home-promotion-empty">
+            <div class="home-promotion-icon" aria-hidden="true">
+                <i class="bi bi-stars"></i>
+            </div>
+            <div class="home-promotion-copy">
+                <h3>Ưu đãi đang được cập nhật</h3>
+                <p>Hiện hệ thống chưa có dữ liệu chương trình khuyến mãi. Vui lòng quay lại sau để khám phá các ưu đãi mới.</p>
+            </div>
+            <a href="{{ route('services.vouchers') }}" class="btn btn-outline-light">
+                Xem thông tin ưu đãi <i class="bi bi-arrow-right ms-1" aria-hidden="true"></i>
+            </a>
+        </div>
+    </section>
+</div>
 @endsection

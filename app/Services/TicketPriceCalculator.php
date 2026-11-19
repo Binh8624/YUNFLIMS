@@ -57,7 +57,10 @@ class TicketPriceCalculator
                 });
 
             return [
-                $seat->id => $this->calculate((float) $showtime->price, $matchingRules),
+                $seat->id => $this->calculate(
+                    $showtime->basePriceForSeatType($seat->seat_type),
+                    $matchingRules
+                ),
             ];
         });
     }

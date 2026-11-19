@@ -9,6 +9,10 @@ class DatabaseSeeder extends Seeder
 {
     public function run(): void
     {
+        if (app()->environment('production')) {
+            throw new \RuntimeException('Sample data seeding is disabled in production.');
+        }
+
         User::factory()->create([
             'name' => 'Test User',
             'email' => 'test@example.com',

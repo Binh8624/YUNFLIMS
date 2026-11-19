@@ -5,23 +5,36 @@
 @section('content')
 <div class="container py-5">
     <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-3">
-        <h2 class="mb-0">Lịch sử đặt vé</h2>
-        <a href="{{ route('showtimes.index') }}" class="btn btn-red">Đặt vé mới</a>
+        <div>
+            <span class="hero-kicker">TÀI KHOẢN CỦA BẠN</span>
+            <h1 class="section-title mt-2 mb-0">Lịch sử đặt vé</h1>
+        </div>
+        <a href="{{ route('showtimes.index') }}" class="btn btn-red">
+            <i class="bi bi-ticket-perforated me-2"></i>Đặt vé mới
+        </a>
     </div>
+
+    <nav class="catalog-tabs mb-4" aria-label="Lọc lịch sử đặt vé">
+        <a href="{{ route('bookings.history') }}" class="{{ request('status') ? '' : 'active' }}">Tất cả vé</a>
+        <a href="{{ route('bookings.history', ['status' => 'upcoming']) }}" class="{{ request('status') === 'upcoming' ? 'active' : '' }}">Sắp xem</a>
+        <a href="{{ route('bookings.history', ['status' => 'used']) }}" class="{{ request('status') === 'used' ? 'active' : '' }}">Đã xem</a>
+        <a href="{{ route('bookings.history', ['status' => 'cancelled']) }}" class="{{ request('status') === 'cancelled' ? 'active' : '' }}">Đã hủy</a>
+        <a href="{{ route('bookings.history', ['status' => 'pending']) }}" class="{{ request('status') === 'pending' ? 'active' : '' }}">Chờ xử lý</a>
+    </nav>
 
     @if ($bookings->isEmpty())
         <div class="alert alert-secondary border-0">
-            Bạn chưa có đơn đặt vé nào.
+            Không có vé nào trong danh mục này.
         </div>
     @else
         <div class="row g-3">
             @foreach ($bookings as $booking)
                 <div class="col-12">
-                    <div class="card bg-dark text-white border-secondary">
+                    <div class="card bg-dark text-white border-secondary cinema-panel booking-history-card">
                         <div class="card-body d-flex justify-content-between align-items-start flex-wrap gap-3">
                             <div>
                                 <div class="d-flex align-items-center gap-2 mb-2 flex-wrap">
-                                    <strong class="text-warning">{{ $booking->booking_code }}</strong>
+                                    <strong class="booking-code">{{ $booking->booking_code }}</strong>
                                     <span class="badge {{ $booking->status === 'confirmed' ? 'bg-success' : ($booking->status === 'pending' ? 'bg-warning text-dark' : 'bg-danger') }}">
                                         {{ $booking->status === 'confirmed' ? 'Đã xác nhận' : ($booking->status === 'pending' ? 'Chờ thanh toán' : 'Đã hủy') }}
                                     </span>

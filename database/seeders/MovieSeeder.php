@@ -12,6 +12,10 @@ class MovieSeeder extends Seeder
 {
     public function run(): void
     {
+        if (app()->environment('production')) {
+            throw new \RuntimeException('Sample data seeding is disabled in production.');
+        }
+
         $movies = [
             [
                 'title' => 'Avengers: Endgame',
@@ -89,7 +93,11 @@ class MovieSeeder extends Seeder
                 }
 
                 if ($defaultFormat) {
-                    $savedMovie->formats()->syncWithoutDetaching([$defaultFormat->id]);
+                    if (! $savedMovie->format_id) {
+                        $savedMovie->update(['format_id' => $defaultFormat->id]);
+                    }
+
+                    $savedMovie->formats()->sync([(int) $savedMovie->format_id]);
                 }
             }
         });
