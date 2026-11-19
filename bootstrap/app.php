@@ -17,6 +17,9 @@ return Application::configure(basePath: dirname(__DIR__))
             'admin.audit' => \App\Http\Middleware\AdminActivityLogMiddleware::class,
             'active' => \App\Http\Middleware\ActiveAccountMiddleware::class,
         ]);
+        $middleware->validateCsrfTokens(except: [
+            'payment/webhook/*',
+        ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         //

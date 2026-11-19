@@ -74,25 +74,26 @@
                         <div class="payment-sandbox-head">
                             <i class="bi bi-shield-lock" aria-hidden="true"></i>
                             <div>
-                                <h3 class="h6 mb-1">Cổng thanh toán mô phỏng</h3>
-                                <p class="mb-0">Đây là môi trường demo. Mỗi lựa chọn bên dưới gửi một kết quả giao dịch khác nhau lên máy chủ để kiểm tra luồng xử lý; vé chỉ được xác nhận khi thanh toán thành công.</p>
+                                <h3 class="h6 mb-1">Chọn cổng thanh toán</h3>
+                                <p class="mb-0">Bạn sẽ được chuyển tới cổng thanh toán để hoàn tất giao dịch. Vé chỉ được xác nhận khi máy chủ nhận và xác minh kết quả từ cổng — không phải từ trình duyệt.</p>
                             </div>
                         </div>
-                        <form method="POST" action="{{ route('bookings.payment.process', $booking) }}">
-                            @csrf
-                            <div class="d-flex flex-wrap gap-2">
-                                <button type="submit" name="payment_result" value="success" class="btn btn-success">
-                                    <i class="bi bi-check-circle me-2" aria-hidden="true"></i>Thanh toán thành công
-                                </button>
-                                <button type="submit" name="payment_result" value="failed" class="btn btn-outline-warning">
-                                    <i class="bi bi-x-circle me-2" aria-hidden="true"></i>Thanh toán thất bại
-                                </button>
-                                <button type="submit" name="payment_result" value="timeout" class="btn btn-outline-light">
-                                    <i class="bi bi-clock-history me-2" aria-hidden="true"></i>Hết thời gian
-                                </button>
-                            </div>
-                            <input type="hidden" name="payment_method" value="mock_test" />
-                        </form>
+                        @forelse ($gateways as $gateway)
+                            <form method="POST" action="{{ route('bookings.payment.process', $booking) }}" class="mb-2">
+                                @csrf
+                                <input type="hidden" name="gateway" value="{{ $gateway['name'] }}" />
+                                <div class="d-flex flex-wrap gap-2 align-items-center">
+                                    <span class="text-secondary me-1">{{ $gateway['label'] }}:</span>
+                                    @foreach ($gateway['methods'] as $methodValue => $methodLabel)
+                                        <button type="submit" name="method" value="{{ $methodValue }}" class="btn btn-success">
+                                            <i class="bi bi-qr-code-scan me-2" aria-hidden="true"></i>{{ $methodLabel }}
+                                        </button>
+                                    @endforeach
+                                </div>
+                            </form>
+                        @empty
+                            <div class="alert alert-danger mb-0">Chưa có cổng thanh toán nào được bật. Liên hệ quản trị viên.</div>
+                        @endforelse
                     </div>
 
                     <div class="d-flex flex-column flex-sm-row justify-content-between align-items-sm-center gap-3 mt-4 pt-3 border-top border-secondary">
