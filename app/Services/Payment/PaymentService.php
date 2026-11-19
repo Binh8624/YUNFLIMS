@@ -96,6 +96,19 @@ class PaymentService
     public function handleCallback(string $gatewayName, array $payload, string $source): PaymentEvent
     {
         $result = $this->gateway($gatewayName)->verifyCallback($payload);
+
+        return $this->processEvent($gatewayName, $payload, $result, $source);
+    }
+
+    public function reconcile(Payment $payment): PaymentEvent
+    {
+        $result = $this->gateway($payment->gateway)->queryTransaction($payment);
+
+        return $this->processEvent($payment->gateway, $result['raw'], $result, 'reconcile');
+    }
+
+    private function processEvent(string $gatewayName, array $payload, array $result, string $source): PaymentEvent
+    {
         $eventHash = hash('sha256', $gatewayName . '|' . $source . '|' . json_encode($this->canonical($payload)));
 
         return DB::transaction(function () use ($gatewayName, $payload, $result, $eventHash) {

@@ -62,6 +62,31 @@ class Booking extends Model
             ->getString();
     }
 
+    public static function releaseExpiredHolds(): int
+    {
+        $expiredIds = self::where('status', 'pending')
+            ->whereNotNull('hold_expires_at')
+            ->where('hold_expires_at', '<=', now())
+            ->pluck('id');
+
+        if ($expiredIds->isEmpty()) {
+            return 0;
+        }
+
+        self::whereIn('id', $expiredIds)->update([
+            'status' => 'cancelled',
+            'payment_status' => 'timeout',
+        ]);
+        Payment::whereIn('booking_id', $expiredIds)
+            ->where('status', Payment::STATUS_PENDING)
+            ->update(['status' => Payment::STATUS_TIMEOUT]);
+        BookingSeat::whereIn('booking_id', $expiredIds)
+            ->whereNull('released_at')
+            ->update(['released_at' => now()]);
+
+        return $expiredIds->count();
+    }
+
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);

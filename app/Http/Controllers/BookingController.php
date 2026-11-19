@@ -402,14 +402,7 @@ class BookingController extends Controller
                     ]);
                 }
 
-                Booking::where('showtime_id', $lockedShowtime->id)
-                    ->where('status', 'pending')
-                    ->whereNotNull('hold_expires_at')
-                    ->where('hold_expires_at', '<=', now())
-                    ->update([
-                        'status' => 'cancelled',
-                        'payment_status' => 'cancelled',
-                    ]);
+                Booking::releaseExpiredHolds();
 
                 $seats = Seat::whereIn('id', $validated['seats'])
                     ->where('room_id', $lockedShowtime->room_id)
@@ -511,10 +504,7 @@ class BookingController extends Controller
         }
 
         if (! $booking->hold_expires_at || $booking->hold_expires_at->isPast()) {
-            $booking->update([
-                'status' => 'cancelled',
-                'payment_status' => 'cancelled',
-            ]);
+            Booking::releaseExpiredHolds();
 
             return redirect()->route('bookings.show', $booking)
                 ->withErrors(['payment' => 'Thời gian giữ ghế đã hết. Vui lòng đặt lại ghế.']);
@@ -603,13 +593,7 @@ class BookingController extends Controller
 
     private function expirePendingHolds(): void
     {
-        Booking::where('status', 'pending')
-            ->whereNotNull('hold_expires_at')
-            ->where('hold_expires_at', '<=', now())
-            ->update([
-                'status' => 'cancelled',
-                'payment_status' => 'cancelled',
-            ]);
+        Booking::releaseExpiredHolds();
     }
 
     private function occupiedSeatIds(int $showtimeId): array

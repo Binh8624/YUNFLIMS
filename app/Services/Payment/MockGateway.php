@@ -44,6 +44,19 @@ class MockGateway implements PaymentGateway
         ];
     }
 
+    public function queryTransaction(Payment $payment): array
+    {
+        return [
+            'signature_valid' => true,
+            'status' => Payment::STATUS_PENDING,
+            'order_ref' => $payment->order_ref,
+            'transaction_code' => $payment->transaction_code,
+            'amount' => (float) $payment->amount,
+            'message' => 'Mock gateway không có giao dịch chờ đối soát',
+            'raw' => ['order_ref' => $payment->order_ref, 'status' => 'pending'],
+        ];
+    }
+
     private function secret(): string
     {
         return (string) (config('payment.gateways.mock.secret') ?: hash('sha256', (string) config('app.key')));
