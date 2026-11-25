@@ -186,7 +186,7 @@ class User extends Authenticatable
                 'manage_members',
                 'manage_gift_cards',
             ],
-            self::ROLE_BRANCH_MANAGER => [
+self::ROLE_BRANCH_MANAGER => [
                 'access_admin',
                 'manage_cinema',
                 'manage_bookings',
