@@ -15,12 +15,13 @@ class HomeController extends Controller
     public function index()
     {
         $hasPopularityData = Movie::query()
-            ->whereHas('bookings', fn (Builder $bookings) => $bookings->where('bookings.status', 'confirmed'))
+            ->whereHas('bookings', fn (Builder $bookings) => $bookings
+                ->where('bookings.status', 'confirmed'))
             ->exists()
             || DB::table('reviews')->exists();
 
         $featuredQuery = Movie::query()
-            ->with('format')
+            ->with('formats')
             ->where('status', 'now_showing')
             ->where('age_rating', '<>', 'C')
             ->whereNotNull('title')
@@ -37,7 +38,8 @@ class HomeController extends Controller
         if ($hasPopularityData) {
             $featuredQuery
                 ->where(fn (Builder $query) => $query
-                    ->whereHas('bookings', fn (Builder $bookings) => $bookings->where('bookings.status', 'confirmed'))
+                    ->whereHas('bookings', fn (Builder $bookings) => $bookings
+                        ->where('bookings.status', 'confirmed'))
                     ->orWhereHas('reviews'))
                 ->orderByDesc('bookings_count')
                 ->orderByDesc('reviews_avg_rating');
@@ -45,10 +47,13 @@ class HomeController extends Controller
             $featuredQuery->where('is_featured', true);
         }
 
-        $featured = $featuredQuery->orderByDesc('created_at')->limit(5)->get();
+        $featured = $featuredQuery
+            ->orderByDesc('created_at')
+            ->limit(5)
+            ->get();
 
         $movies = Movie::query()
-            ->with('format')
+            ->with('formats')
             ->where('status', 'now_showing')
             ->where('age_rating', '<>', 'C')
             ->whereNotNull('title')
@@ -64,7 +69,7 @@ class HomeController extends Controller
             ->get();
 
         $comingSoon = Movie::query()
-            ->with('format')
+            ->with('formats')
             ->where('status', 'coming_soon')
             ->where('age_rating', '<>', 'C')
             ->whereNotNull('title')
@@ -75,7 +80,11 @@ class HomeController extends Controller
             ->limit(5)
             ->get();
 
-        return view('home', compact('movies', 'featured', 'comingSoon'));
+        return view('home', compact(
+            'movies',
+            'featured',
+            'comingSoon'
+        ));
     }
 
     public function movies(Request $request)
@@ -83,7 +92,11 @@ class HomeController extends Controller
         $publicMovies = Movie::query()
             ->whereIn('status', ['now_showing', 'coming_soon'])
             ->where('age_rating', '<>', 'C');
-        $genres = MovieGenres::options((clone $publicMovies)->pluck('genre'));
+
+        $genres = MovieGenres::options(
+            (clone $publicMovies)->pluck('genre')
+        );
+
         $ageRatings = (clone $publicMovies)
             ->where('age_rating_verified', true)
             ->whereNotNull('age_rating')
@@ -101,16 +114,17 @@ class HomeController extends Controller
         ]);
 
         $query = (clone $publicMovies)
-            ->with('format')
+            ->with('formats')
             ->withAvg('reviews', 'rating')
             ->withCount('reviews')
             ->withCount([
-                'bookings' => fn (Builder $bookings) => $bookings
+                'bookings as bookings_count' => fn (Builder $bookings) => $bookings
                     ->where('bookings.status', 'confirmed'),
             ]);
 
         if (! empty($filters['search'])) {
             $search = trim($filters['search']);
+
             $query->where('title', 'like', "%{$search}%");
         }
 
@@ -136,7 +150,11 @@ class HomeController extends Controller
 
         $movies = $query->paginate(12)->withQueryString();
 
-        return view('movies.index', compact('movies', 'genres', 'ageRatings'));
+        return view('movies.index', compact(
+            'movies',
+            'genres',
+            'ageRatings'
+        ));
     }
 
     public function suggestions(Request $request): JsonResponse
@@ -144,6 +162,7 @@ class HomeController extends Controller
         $validated = $request->validate([
             'search' => ['required', 'string', 'min:2', 'max:100'],
         ]);
+
         $search = trim($validated['search']);
 
         $titles = Movie::query()
@@ -159,38 +178,78 @@ class HomeController extends Controller
 
     public function show(Request $request, Movie $movie)
     {
-        abort_if($movie->status === 'inactive' || $movie->age_rating === 'C', 404);
+        abort_if(
+            $movie->status === 'inactive' || $movie->age_rating === 'C',
+            404
+        );
+
         $validated = $request->validate([
             'date' => ['nullable', 'date', 'after_or_equal:today'],
         ]);
+
         $date = $validated['date'] ?? null;
 
-        $movie->load([
-            'format',
-            'reviews' => fn ($query) => $query->with('user')->latest()->limit(20),
-        ]);
+        // Thông tin phim và các định dạng được hỗ trợ.
+        $movie->load('formats');
 
-        $movie->loadCount('reviews')->loadAvg('reviews', 'rating');
+        // Thống kê đánh giá.
+        $movie->loadCount('reviews')
+            ->loadAvg('reviews', 'rating');
+
+        // Danh sách đánh giá có phân trang.
+        $reviews = $movie->reviews()
+            ->with('user')
+            ->latest()
+            ->paginate(10)
+            ->withQueryString();
+
+        // Thể loại dùng để tìm phim liên quan.
         $relatedGenre = $movie->genre_labels[0] ?? null;
+
         $relatedMovies = Movie::query()
-            ->with('format')
+            ->with('formats')
             ->where('id', '<>', $movie->getKey())
             ->whereIn('status', ['now_showing', 'coming_soon'])
             ->where('age_rating', '<>', 'C')
             ->when(
                 $relatedGenre !== null,
-                fn (Builder $query) => MovieGenres::applyFilter($query, $relatedGenre)
+                fn (Builder $query) => MovieGenres::applyFilter(
+                    $query,
+                    $relatedGenre
+                )
             )
             ->withAvg('reviews', 'rating')
             ->withCount('reviews')
             ->latest()
             ->limit(4)
             ->get();
+
+        // Đánh giá hiện tại của khách hàng.
         $myReview = auth()->check()
-            ? $movie->reviews()->where('user_id', auth()->id())->first()
+            ? $movie->reviews()
+                ->where('user_id', auth()->id())
+                ->first()
             : null;
 
-        return view('movies.show', compact('movie', 'relatedMovies', 'myReview', 'relatedGenre', 'date'));
+        // Chỉ khách đã thanh toán và sử dụng vé của phim này
+        // mới được phép gửi hoặc cập nhật đánh giá.
+        $canReview = auth()->check()
+    && $movie->status !== 'inactive'
+    && $movie->bookings()
+        ->where('bookings.user_id', auth()->id())
+        ->where('bookings.status', 'confirmed')
+        ->where('bookings.payment_status', 'paid')
+        ->where('bookings.ticket_status', 'used')
+        ->exists();
+
+        return view('movies.show', compact(
+            'movie',
+            'relatedMovies',
+            'myReview',
+            'relatedGenre',
+            'date',
+            'reviews',
+            'canReview'
+        ));
     }
 }
-

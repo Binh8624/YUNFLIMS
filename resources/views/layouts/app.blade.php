@@ -515,6 +515,12 @@
                     <a class="admin-pro-link {{ request()->routeIs('admin.pricing.*') ? 'active' : '' }}" href="{{ route('admin.pricing.index') }}"><i class="bi bi-tags" aria-hidden="true"></i><span>Quy tắc giá</span></a>
                     @endcan
 
+                    @can('manage-services')
+                    <span class="admin-pro-nav-label">DỊCH VỤ</span>
+                    <a class="admin-pro-link {{ request()->routeIs('admin.concession-products.*') ? 'active' : '' }}" href="{{ route('admin.concession-products.index') }}"><i class="bi bi-cup-straw" aria-hidden="true"></i><span>Quản lý bắp nước</span></a>
+                    <a class="admin-pro-link {{ request()->routeIs('admin.concession-orders.*') ? 'active' : '' }}" href="{{ route('admin.concession-orders.index') }}"><i class="bi bi-receipt" aria-hidden="true"></i><span>Đơn hàng bắp nước</span></a>
+                    @endcan
+
                     <span class="admin-pro-nav-label">TÀI KHOẢN</span>
                     @can('manage-users')
                     <a class="admin-pro-link {{ request()->routeIs('admin.users.*') ? 'active' : '' }}" href="{{ route('admin.users.index') }}"><i class="bi bi-people" aria-hidden="true"></i><span>Người dùng &amp; quyền</span></a>
@@ -544,41 +550,135 @@
     @endif
 </main>
 
+
 @unless (request()->is('admin*') && auth()->check() && auth()->user()->isAdminStaff())
-<footer class="py-4">
+<footer class="py-5">
     <div class="container">
         <div class="row g-4">
-            <div class="col-md-5">
-                <a class="brand text-decoration-none" href="{{ route('home') }}">YUNFLIMS<span class="text-white">.</span></a>
-                <p class="small">
+
+            {{-- Thương hiệu --}}
+            <div class="col-lg-4 col-md-6">
+                <a class="brand text-decoration-none" href="{{ route('home') }}">
+                    YUNFLIMS<span class="text-white">.</span>
+                </a>
+
+                <p class="text-secondary mt-3 pe-lg-4">
                     Trải nghiệm điện ảnh theo cách của bạn.
-                    Khám phá phim hay và tận hưởng những khoảnh khắc đáng nhớ.
+                    Khám phá những bộ phim hấp dẫn, lựa chọn suất chiếu
+                    yêu thích và đặt vé trực tuyến dễ dàng cùng YUNFLIMS.
+                </p>
+
+                <div class="d-flex gap-3 mt-3">
+                    <a href="{{ route('home') }}" aria-label="Trang chủ">
+                        <i class="bi bi-house-door fs-5"></i>
+                    </a>
+                    <a href="{{ route('movies.index') }}" aria-label="Phim">
+                        <i class="bi bi-film fs-5"></i>
+                    </a>
+                    <a href="{{ route('showtimes.index') }}" aria-label="Lịch chiếu">
+                        <i class="bi bi-calendar2-week fs-5"></i>
+                    </a>
+                </div>
+            </div>
+
+            {{-- Khám phá --}}
+            <div class="col-lg-2 col-md-6">
+                <h6 class="text-white fw-bold mb-3">KHÁM PHÁ</h6>
+
+                <p><a href="{{ route('home') }}">Trang chủ</a></p>
+                <p><a href="{{ route('movies.index') }}">Phim đang chiếu</a></p>
+                <p><a href="{{ route('showtimes.index') }}">Lịch chiếu</a></p>
+                <p><a href="{{ route('services.index') }}">Dịch vụ</a></p>
+                <p><a href="{{ route('pages.about') }}">Giới thiệu YUNFLIMS</a></p>
+            </div>
+
+            {{-- Hỗ trợ --}}
+            <div class="col-lg-3 col-md-6">
+                <h6 class="text-white fw-bold mb-3">HỖ TRỢ KHÁCH HÀNG</h6>
+
+                <p>
+                    <a href="{{ route('pages.support') }}">
+                        <i class="bi bi-question-circle me-2"></i>Câu hỏi thường gặp
+                    </a>
+                </p>
+
+                <p>
+                    <a href="{{ route('pages.contact') }}">
+                        <i class="bi bi-envelope me-2"></i>Liên hệ
+                    </a>
+                </p>
+
+                <p>
+                    <a href="{{ route('pages.careers') }}">
+                        <i class="bi bi-briefcase me-2"></i>Cơ hội nghề nghiệp
+                    </a>
+                </p>
+
+                <p>
+                    <a href="{{ route('services.vouchers') }}">
+                        <i class="bi bi-stars me-2"></i>Khuyến mãi
+                    </a>
+                </p>
+
+                <p>
+                    <a href="{{ route('services.gift-cards') }}">
+                        <i class="bi bi-gift me-2"></i>Thẻ quà tặng
+                    </a>
                 </p>
             </div>
 
-            <div class="col-md-3">
-                <h6 class="text-white">Khám phá</h6>
-                <p><a href="{{ route('home') }}#movies"><i class="bi bi-film me-2"></i>Phim đang chiếu</a></p>
-                <p><a href="{{ route('showtimes.index') }}"><i class="bi bi-calendar2-week me-2"></i>Lịch chiếu</a></p>
-                <p><a href="{{ route('services.vouchers') }}"><i class="bi bi-stars me-2"></i>Khuyến mãi</a></p>
-                <p><a href="{{ route('services.gift-cards') }}"><i class="bi bi-gift me-2"></i>Thẻ quà tặng</a></p>
+            {{-- Chính sách --}}
+            <div class="col-lg-3 col-md-6">
+                <h6 class="text-white fw-bold mb-3">CHÍNH SÁCH</h6>
+
+                <p>
+                    <a href="{{ route('pages.terms') }}">
+                        Điều khoản sử dụng
+                    </a>
+                </p>
+
+                <p>
+                    <a href="{{ route('pages.privacy') }}">
+                        Chính sách bảo mật
+                    </a>
+                </p>
+
+                <p>
+                    <a href="{{ route('pages.refund') }}">
+                        Chính sách hủy vé và hoàn tiền
+                    </a>
+                </p>
+
+                <p>
+                    <a href="{{ route('pages.age-rating') }}">
+                        Phân loại độ tuổi phim
+                    </a>
+                </p>
             </div>
 
-            <div class="col-md-4">
-                <h6 class="text-white">Liên hệ</h6>
-                <p class="small"><a href="{{ route('services.index') }}#cinema-formats"><i class="bi bi-building me-2"></i>Địa chỉ và số điện thoại các cụm rạp</a></p>
-                <p class="small"><a href="{{ route('services.index') }}#support"><i class="bi bi-question-circle me-2"></i>Hỗ trợ &amp; câu hỏi thường gặp</a></p>
-            </div>
         </div>
 
-        <hr class="border-secondary">
+        <hr class="border-secondary my-4">
 
-        <p class="small text-center mb-0">
-            &copy; {{ date('Y') }} YUNFLIMS Cinema. All rights reserved.
-        </p>
+        <div class="row align-items-center">
+            <div class="col-md-6">
+                <p class="small text-secondary mb-md-0">
+                    &copy; {{ date('Y') }} YUNFLIMS Cinema.
+                    All rights reserved.
+                </p>
+            </div>
+
+            <div class="col-md-6 text-md-end">
+                <p class="small text-secondary mb-0">
+                    Made with <i class="bi bi-heart-fill text-danger"></i>
+                    for movie lovers.
+                </p>
+            </div>
+        </div>
     </div>
 </footer>
 @endunless
+
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 @stack('scripts')

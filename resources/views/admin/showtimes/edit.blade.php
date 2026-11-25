@@ -16,10 +16,7 @@
         </div>
     @endif
 
-    <form
-        method="POST"
-        action="{{ route('admin.showtimes.update', $showtime) }}"
-    >
+    <form method="POST" action="{{ route('admin.showtimes.update', $showtime) }}">
         @csrf
         @method('PUT')
 
@@ -30,10 +27,11 @@
                 @foreach ($movies as $movie)
                     <option
                         value="{{ $movie->id }}"
-                        data-format-id="{{ $movie->format_id }}"
+                        data-format-ids="{{ $movie->formats->pluck('id')->implode(',') }}"
                         @selected(old('movie_id', $showtime->movie_id) == $movie->id)
                     >
-                        {{ $movie->title }} — {{ $movie->format?->name }}
+                        {{ $movie->title }}
+                        — {{ $movie->formats->pluck('name')->join(', ') }}
                     </option>
                 @endforeach
             </select>
@@ -46,10 +44,13 @@
                 @foreach ($rooms as $room)
                     <option
                         value="{{ $room->id }}"
-                        data-format-id="{{ $room->format_id }}"
+                        data-format-ids="{{ $room->formats->pluck('id')->implode(',') }}"
                         @selected(old('room_id', $showtime->room_id) == $room->id)
                     >
-                        {{ $room->cinema->name }} — {{ $room->room_code }} — {{ $room->name }} ({{ $room->format?->name }})
+                        {{ $room->cinema->name }}
+                        — {{ $room->room_code }}
+                        — {{ $room->name }}
+                        ({{ $room->formats->pluck('name')->join(', ') }})
                     </option>
                 @endforeach
             </select>
@@ -57,17 +58,27 @@
 
         <div class="mb-3">
             <label class="form-label">Định dạng *</label>
+
             <select name="format_id" class="form-select" required>
                 @foreach ($formats as $format)
-                    <option value="{{ $format->id }}" @selected(old('format_id', $showtime->format_id) == $format->id)>{{ $format->name }}</option>
+                    <option
+                        value="{{ $format->id }}"
+                        @selected(old('format_id', $showtime->format_id) == $format->id)
+                    >
+                        {{ $format->name }}
+                    </option>
                 @endforeach
             </select>
-            <small class="text-secondary">Định dạng được xác định theo phim; chỉ các phòng tương thích mới khả dụng.</small>
+
+            <small class="text-secondary">
+                Chỉ được chọn định dạng mà cả phim và phòng chiếu đều hỗ trợ.
+            </small>
         </div>
 
         <div class="row g-3">
             <div class="col-md-6">
                 <label for="starts_on" class="form-label">Ngày chiếu *</label>
+
                 <input
                     type="date"
                     id="starts_on"
@@ -81,6 +92,7 @@
 
             <div class="col-md-6">
                 <label for="starts_time" class="form-label">Giờ bắt đầu *</label>
+
                 <input
                     type="time"
                     id="starts_time"
@@ -91,8 +103,12 @@
                 >
             </div>
         </div>
+
         <div class="mt-2 mb-3">
-            <label for="ends_at" class="form-label">Thời gian kết thúc (tự tính theo thời lượng phim)</label>
+            <label for="ends_at" class="form-label">
+                Thời gian kết thúc (tự tính theo thời lượng phim)
+            </label>
+
             <input
                 type="datetime-local"
                 id="ends_at"
@@ -105,15 +121,50 @@
         <div class="row g-3 mt-1 mb-3">
             <div class="col-md-4">
                 <label for="price" class="form-label">Giá ghế thường (VNĐ) *</label>
-                <input type="number" id="price" name="price" class="form-control" min="0" max="99999999.99" step="1000" value="{{ old('price', $showtime->price) }}" required>
+
+                <input
+                    type="number"
+                    id="price"
+                    name="price"
+                    class="form-control"
+                    min="0"
+                    max="99999999.99"
+                    step="1000"
+                    value="{{ old('price', $showtime->price) }}"
+                    required
+                >
             </div>
+
             <div class="col-md-4">
                 <label for="vip_price" class="form-label">Giá ghế VIP (VNĐ) *</label>
-                <input type="number" id="vip_price" name="vip_price" class="form-control" min="0" max="99999999.99" step="1000" value="{{ old('vip_price', $showtime->vip_price ?? $showtime->price) }}" required>
+
+                <input
+                    type="number"
+                    id="vip_price"
+                    name="vip_price"
+                    class="form-control"
+                    min="0"
+                    max="99999999.99"
+                    step="1000"
+                    value="{{ old('vip_price', $showtime->vip_price ?? $showtime->price) }}"
+                    required
+                >
             </div>
+
             <div class="col-md-4">
                 <label for="couple_price" class="form-label">Giá ghế đôi (VNĐ) *</label>
-                <input type="number" id="couple_price" name="couple_price" class="form-control" min="0" max="99999999.99" step="1000" value="{{ old('couple_price', $showtime->couple_price ?? $showtime->price) }}" required>
+
+                <input
+                    type="number"
+                    id="couple_price"
+                    name="couple_price"
+                    class="form-control"
+                    min="0"
+                    max="99999999.99"
+                    step="1000"
+                    value="{{ old('couple_price', $showtime->couple_price ?? $showtime->price) }}"
+                    required
+                >
             </div>
         </div>
 
@@ -141,59 +192,146 @@
             Lưu thay đổi
         </button>
 
-        <a
-            href="{{ route('admin.showtimes.index') }}"
-            class="btn btn-outline-light ms-2"
-        >
+        <a href="{{ route('admin.showtimes.index') }}" class="btn btn-outline-light ms-2">
             Quay lại
         </a>
     </form>
 </div>
+
 <script>
     const movieDurations = @json($movies->pluck('duration', 'id'));
+
     const movieSelect = document.querySelector('[name="movie_id"]');
-    const startsOnInput = document.querySelector('[name="starts_on"]');
-    const startsTimeInput = document.querySelector('[name="starts_time"]');
-    const endsInput = document.querySelector('#ends_at');
     const roomSelect = document.querySelector('[name="room_id"]');
     const formatSelect = document.querySelector('[name="format_id"]');
 
-    function updateCompatibleRooms() {
-        const selectedMovie = movieSelect.selectedOptions[0];
-        const formatId = selectedMovie?.dataset.formatId || '';
-        formatSelect.value = formatId;
-        Array.from(formatSelect.options).forEach((option) => {
-            if (option.value) option.disabled = option.value !== formatId;
-        });
+    const startsOnInput = document.querySelector('[name="starts_on"]');
+    const startsTimeInput = document.querySelector('[name="starts_time"]');
+    const endsInput = document.querySelector('#ends_at');
 
-        Array.from(roomSelect.options).forEach((option) => {
+    function getFormatIds(option) {
+        if (!option || !option.dataset.formatIds) {
+            return [];
+        }
+
+        return option.dataset.formatIds
+            .split(',')
+            .filter(id => id !== '');
+    }
+
+    /**
+     * Lọc định dạng theo phim và lọc phòng theo định dạng đã chọn.
+     * Giữ lại lựa chọn hiện tại nếu vẫn tương thích.
+     */
+    function updateCompatibleOptions(
+        preferredFormatId = formatSelect.value,
+        preferredRoomId = roomSelect.value
+    ) {
+        const selectedMovie = movieSelect.selectedOptions[0];
+        const movieFormatIds = getFormatIds(selectedMovie);
+
+        // Chỉ giữ những định dạng mà phim hỗ trợ.
+        Array.from(formatSelect.options).forEach(option => {
             if (!option.value) return;
-            const compatible = formatId !== '' && option.dataset.formatId === formatId;
+
+            const compatible = movieFormatIds.includes(option.value);
+
             option.hidden = !compatible;
             option.disabled = !compatible;
         });
 
-        if (roomSelect.selectedOptions[0]?.disabled) {
-            roomSelect.value = '';
+        // Giữ định dạng hiện tại nếu phim vẫn hỗ trợ.
+        let selectedFormatId = movieFormatIds.includes(String(preferredFormatId))
+            ? String(preferredFormatId)
+            : '';
+
+        // Nếu định dạng hiện tại không còn hợp lệ, chọn định dạng đầu tiên.
+        if (!selectedFormatId) {
+            const firstCompatibleFormat = Array.from(formatSelect.options).find(option => {
+                return option.value && movieFormatIds.includes(option.value);
+            });
+
+            selectedFormatId = firstCompatibleFormat?.value || '';
+        }
+
+        formatSelect.value = selectedFormatId;
+
+        // Lọc phòng theo định dạng đã chọn.
+        const compatibleRooms = [];
+
+        Array.from(roomSelect.options).forEach(option => {
+            if (!option.value) return;
+
+            const roomFormatIds = getFormatIds(option);
+            const compatible = selectedFormatId !== ''
+                && roomFormatIds.includes(selectedFormatId);
+
+            option.hidden = !compatible;
+            option.disabled = !compatible;
+
+            if (compatible) {
+                compatibleRooms.push(option);
+            }
+        });
+
+        // Giữ phòng hiện tại nếu vẫn tương thích.
+        const currentRoomIsCompatible = compatibleRooms.some(option => {
+            return option.value === String(preferredRoomId);
+        });
+
+        if (currentRoomIsCompatible) {
+            roomSelect.value = preferredRoomId;
+        } else {
+            // Nếu phòng cũ không phù hợp, chọn phòng đầu tiên tương thích.
+            roomSelect.value = compatibleRooms[0]?.value || '';
         }
     }
 
+    /**
+     * Tự tính thời gian kết thúc dựa trên thời lượng phim.
+     */
     function updateEndTime() {
         const duration = Number(movieDurations[movieSelect.value] || 0);
-        const start = new Date(`${startsOnInput.value}T${startsTimeInput.value}`);
-        if (!duration || Number.isNaN(start.getTime())) {
+
+        if (!startsOnInput.value || !startsTimeInput.value || !duration) {
             endsInput.value = '';
             return;
         }
+
+        const start = new Date(
+            `${startsOnInput.value}T${startsTimeInput.value}`
+        );
+
+        if (Number.isNaN(start.getTime())) {
+            endsInput.value = '';
+            return;
+        }
+
         start.setMinutes(start.getMinutes() + duration);
-        const local = new Date(start.getTime() - start.getTimezoneOffset() * 60000);
-        endsInput.value = local.toISOString().slice(0, 16);
+
+        const localDate = new Date(
+            start.getTime() - start.getTimezoneOffset() * 60000
+        );
+
+        endsInput.value = localDate.toISOString().slice(0, 16);
     }
 
-    movieSelect.addEventListener('change', updateEndTime);
-    movieSelect.addEventListener('change', updateCompatibleRooms);
+    // Khi đổi phim, cập nhật định dạng và phòng tương thích.
+    movieSelect.addEventListener('change', function () {
+        updateCompatibleOptions();
+        updateEndTime();
+    });
+
+    // Khi đổi định dạng, cập nhật danh sách phòng.
+    formatSelect.addEventListener('change', function () {
+        updateCompatibleOptions(formatSelect.value, roomSelect.value);
+    });
+
     startsOnInput.addEventListener('change', updateEndTime);
     startsTimeInput.addEventListener('change', updateEndTime);
-    updateCompatibleRooms();
+
+    // Khởi tạo danh sách tương thích khi mở trang sửa.
+    updateCompatibleOptions();
+    updateEndTime();
 </script>
 @endsection

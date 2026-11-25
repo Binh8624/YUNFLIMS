@@ -31,6 +31,10 @@ class AppServiceProvider extends ServiceProvider
         Gate::define('manage-formats', fn (User $user) => in_array($user->role, [User::ROLE_SUPER_ADMIN, User::ROLE_ADMIN], true));
         Gate::define('manage-pricing', fn (User $user) => in_array($user->role, [User::ROLE_SUPER_ADMIN, User::ROLE_ADMIN], true));
         Gate::define('view-audit-logs', fn (User $user) => $user->role === User::ROLE_SUPER_ADMIN);
+        Gate::define('manage-services', fn (User $user) => $user->hasPermission('manage_services'));
+        Gate::define('manage-promotions', fn (User $user) => $user->hasPermission('manage_promotions'));
+        Gate::define('manage-members', fn (User $user) => $user->hasPermission('manage_members'));
+        Gate::define('manage-gift-cards', fn (User $user) => $user->hasPermission('manage_gift_cards'));
 
         Password::defaults(fn () => Password::min(12)->mixedCase()->numbers()->symbols());
 

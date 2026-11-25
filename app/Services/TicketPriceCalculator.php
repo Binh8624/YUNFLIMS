@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\PricingHoliday;
 use App\Models\PricingRule;
 use App\Models\Seat;
 use App\Models\Showtime;
@@ -17,16 +18,27 @@ class TicketPriceCalculator
     public function pricesForSeats(Showtime $showtime, Collection $seats): Collection
     {
         $date = $showtime->starts_at;
-        $dayType = $date->isWeekend() ? 'weekend' : 'weekday';
+        $dateString = $date->toDateString();
+
+        $isHoliday = PricingHoliday::whereDate('holiday_date', $dateString)->exists();
+
+        $dayType = $isHoliday
+            ? 'holiday'
+            : ($date->isWeekend() ? 'weekend' : 'weekday');
+
         $time = $date->format('H:i:s');
+
         $seatTypes = $seats->pluck('seat_type')->unique()->all();
+
         $rules = PricingRule::query()
             ->where('is_active', true)
             ->where(function ($query) use ($seatTypes) {
-                $query->whereNull('seat_type')->orWhereIn('seat_type', $seatTypes);
+                $query->whereNull('seat_type')
+                    ->orWhereIn('seat_type', $seatTypes);
             })
             ->where(function ($query) use ($showtime) {
-                $query->whereNull('format_id')->orWhere('format_id', $showtime->format_id);
+                $query->whereNull('format_id')
+                    ->orWhere('format_id', $showtime->format_id);
             })
             ->whereIn('day_type', ['any', $dayType])
             ->get();
@@ -34,12 +46,22 @@ class TicketPriceCalculator
         return $seats->mapWithKeys(function (Seat $seat) use ($rules, $time, $showtime) {
             $matchingRules = $rules
                 ->filter(function (PricingRule $rule) use ($seat, $time) {
-                    if ($rule->seat_type !== null && $rule->seat_type !== $seat->seat_type) {
+                    if (
+                        $rule->seat_type !== null
+                        && $rule->seat_type !== $seat->seat_type
+                    ) {
                         return false;
                     }
 
-                    if ($rule->time_start !== null) {
-                        return $rule->time_start <= $time && $rule->time_end >= $time;
+                    if ($rule->time_start !== null && $rule->time_end !== null) {
+                        $start = $rule->time_start;
+                        $end = $rule->time_end;
+
+                        if ($start <= $end) {
+                            return $time >= $start && $time <= $end;
+                        }
+
+                        return $time >= $start || $time <= $end;
                     }
 
                     return true;

@@ -24,32 +24,21 @@ class User extends Authenticatable
     public const ROLE_CONTENT_STAFF = 'content_staff';
     public const ROLE_ADMIN = 'admin';
 
-    /**
-     * The attributes that are mass assignable.
-     *
-     * @var list<string>
-     */
     protected $fillable = [
         'name',
         'email',
         'password',
+        'role',
+        'is_active',
+        'member_tier',
+        'loyalty_points',
     ];
 
-    /**
-     * The attributes that should be hidden for serialization.
-     *
-     * @var list<string>
-     */
     protected $hidden = [
         'password',
         'remember_token',
     ];
 
-    /**
-     * Get the attributes that should be cast.
-     *
-     * @return array<string, string>
-     */
     protected function casts(): array
     {
         return [
@@ -178,6 +167,10 @@ class User extends Authenticatable
                 'manage_reports',
                 'manage_users',
                 'check_tickets',
+                'manage_services',
+                'manage_promotions',
+                'manage_members',
+                'manage_gift_cards',
             ],
             self::ROLE_ADMIN => [
                 'access_admin',
@@ -188,6 +181,10 @@ class User extends Authenticatable
                 'manage_reports',
                 'manage_users',
                 'check_tickets',
+                'manage_services',
+                'manage_promotions',
+                'manage_members',
+                'manage_gift_cards',
             ],
             self::ROLE_BRANCH_MANAGER => [
                 'access_admin',
@@ -196,20 +193,27 @@ class User extends Authenticatable
                 'manage_payments',
                 'manage_reports',
                 'check_tickets',
+                'manage_services',
+                'manage_gift_cards',
             ],
+
             self::ROLE_TICKET_SELLER => [
                 'access_admin',
                 'manage_bookings',
                 'manage_payments',
                 'check_tickets',
+                'manage_gift_cards',
             ],
+
             self::ROLE_TICKET_CHECKER => [
                 'access_admin',
                 'check_tickets',
             ],
+
             self::ROLE_CONTENT_STAFF => [
                 'access_admin',
                 'manage_content',
+                'manage_promotions',
             ],
         ];
 
@@ -224,13 +228,56 @@ class User extends Authenticatable
         return $this->hasMany(Booking::class);
     }
 
+    /**
+     * Các đơn đặt đồ ăn, thức uống.
+     */
+    public function concessionOrders(): HasMany
+    {
+        return $this->hasMany(ConcessionOrder::class);
+    }
+
+    /**
+     * Lịch sử sử dụng mã khuyến mãi.
+     */
+    public function promotionUsages(): HasMany
+    {
+        return $this->hasMany(PromotionUsage::class);
+    }
+
+    /**
+     * Thẻ quà tặng đã mua.
+     */
+    public function purchasedGiftCards(): HasMany
+    {
+        return $this->hasMany(GiftCard::class, 'purchased_by');
+    }
+
+    /**
+     * Thẻ quà tặng được nhận.
+     */
+    public function assignedGiftCards(): HasMany
+    {
+        return $this->hasMany(GiftCard::class, 'assigned_to');
+    }
+
+    /**
+     * Lịch sử giao dịch điểm thành viên.
+     */
+    public function loyaltyTransactions(): HasMany
+    {
+        return $this->hasMany(LoyaltyTransaction::class);
+    }
+
     public function favoriteMovies(): BelongsToMany
     {
-        return $this->belongsToMany(Movie::class, 'movie_favorites')->withTimestamps();
+        return $this->belongsToMany(Movie::class, 'movie_favorites')
+            ->withTimestamps();
     }
 
     public function isFavoriteMovie(Movie $movie): bool
     {
-        return $this->favoriteMovies()->whereKey($movie->getKey())->exists();
+        return $this->favoriteMovies()
+            ->whereKey($movie->getKey())
+            ->exists();
     }
 }

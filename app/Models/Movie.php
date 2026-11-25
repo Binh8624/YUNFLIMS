@@ -14,14 +14,17 @@ class Movie extends Model
     protected $attributes = [
         'age_rating_verified' => false,
         'is_featured' => false,
+        'is_dubbed' => false,
     ];
 
     protected $fillable = [
         'title',
+        'slug',
         'genre',
         'duration',
         'label',
         'poster',
+        'gallery',
         'description',
         'status',
         'trailer_url',
@@ -29,6 +32,13 @@ class Movie extends Model
         'age_rating_verified',
         'is_featured',
         'format_id',
+        'release_date',
+        'country',
+        'director',
+        'cast_members',
+        'original_language',
+        'subtitle_languages',
+        'is_dubbed',
     ];
 
     protected function casts(): array
@@ -36,6 +46,9 @@ class Movie extends Model
         return [
             'age_rating_verified' => 'boolean',
             'is_featured' => 'boolean',
+            'is_dubbed' => 'boolean',
+            'release_date' => 'date',
+            'gallery' => 'array',
         ];
     }
 
@@ -46,7 +59,9 @@ class Movie extends Model
 
     public function ageRatingLabel(): string
     {
-        return $this->age_rating_verified ? (string) $this->age_rating : 'Chưa xác nhận';
+        return $this->age_rating_verified
+            ? (string) $this->age_rating
+            : 'Chưa xác nhận';
     }
 
     public function showtimes(): HasMany
@@ -83,7 +98,8 @@ class Movie extends Model
 
     public function favoritedBy(): BelongsToMany
     {
-        return $this->belongsToMany(User::class, 'movie_favorites')->withTimestamps();
+        return $this->belongsToMany(User::class, 'movie_favorites')
+            ->withTimestamps();
     }
 
     public function isFavoritedBy(?User $user): bool
@@ -92,6 +108,8 @@ class Movie extends Model
             return false;
         }
 
-        return $this->favoritedBy()->whereKey($user->getKey())->exists();
+        return $this->favoritedBy()
+            ->whereKey($user->getKey())
+            ->exists();
     }
 }
