@@ -11,6 +11,11 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css"
           rel="stylesheet">
 
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&family=Oswald:wght@500;600;700&display=swap"
+          rel="stylesheet">
+
     <style>
         :root {
             --ys-red: #e50914;
@@ -65,8 +70,7 @@
             align-items: center;
             background:
                 linear-gradient(90deg, #101014 0%, rgba(16,16,20,.93) 35%, rgba(16,16,20,.15) 100%),
-                url('https://image.tmdb.org/t/p/original/8b8R8l88Qje9dn9OE8PY05Nxl1X.jpg')
-                center 30% / cover no-repeat;
+                radial-gradient(ellipse at 70% 20%, #2a2a3a, #101014 70%);
         }
 
         .hero-content {

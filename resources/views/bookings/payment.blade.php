@@ -9,8 +9,13 @@
         <div class="col-lg-8">
             <div class="card bg-dark text-white border-secondary cinema-panel">
                 <div class="card-body p-4">
-                    <h2 class="mb-4">Thanh toán vé</h2>
-
+                    <div class="booking-step">
+                        <span class="booking-step-number">03</span>
+                        <div>
+                            <span class="hero-kicker">ĐẶT VÉ</span>
+                            <h1 class="h3 mb-0 mt-1">Thanh toán vé</h1>
+                        </div>
+                    </div>
                     <div class="alert alert-warning d-flex gap-3" role="status">
                         <i class="bi bi-clock-history fs-4" aria-hidden="true"></i>
                         <div>
@@ -109,66 +114,54 @@
                             @foreach ($booking->concessionOrder->items as $item)
                                 <div class="d-flex justify-content-between align-items-center gap-3 mb-3">
                                     <div>
-                                        <div class="fw-semibold">
-                                            {{ $item->product_name }}
-                                        </div>
-                                        <small class="text-secondary">
-                                            {{ number_format((float) $item->unit_price, 0, ',', '.') }} đ
-                                            × {{ $item->quantity }}
-                                        </small>
+                                        <div class="fw-semibold">{{ $item->product_name }}</div>
+                                        <small class="text-secondary">{{ number_format((float) $item->unit_price, 0, ',', '.') }} đ × {{ $item->quantity }}</small>
                                     </div>
-
-                                    <div class="fw-semibold text-warning text-nowrap">
-                                        {{ number_format((float) $item->subtotal, 0, ',', '.') }} đ
-                                    </div>
+                                    <div class="fw-semibold text-warning text-nowrap">{{ number_format((float) $item->subtotal, 0, ',', '.') }} đ</div>
                                 </div>
                             @endforeach
-
                             <div class="d-flex justify-content-between border-top border-secondary pt-3">
                                 <span class="text-secondary">Tổng bắp nước</span>
-                                <strong class="text-warning">
-                                    {{ number_format((float) $booking->concessionOrder->total_amount, 0, ',', '.') }} đ
-                                </strong>
+                                <strong class="text-warning">{{ number_format((float) $booking->concessionOrder->total_amount, 0, ',', '.') }} đ</strong>
                             </div>
                         @else
-                            <div class="text-secondary mb-2">
-                                Bạn chưa chọn bắp nước.
-                            </div>
-
-                            <a href="{{ route('bookings.concessions', $booking) }}"
-                               class="btn btn-sm btn-outline-warning">
-                                <i class="bi bi-plus-circle me-1"></i>
-                                Chọn bắp nước
+                            <div class="text-secondary mb-2">Bạn chưa chọn bắp nước.</div>
+                            <a href="{{ route('bookings.concessions', $booking) }}" class="btn btn-sm btn-outline-warning">
+                                <i class="bi bi-plus-circle me-1"></i> Chọn bắp nước
                             </a>
                         @endif
                     </div>
 
                     {{-- THANH TOÁN --}}
                     <div class="border-top border-secondary pt-4 mt-4">
-                        @if ($mockPaymentEnabled)
-                            <div class="alert alert-secondary" role="status">
-                                <i class="bi bi-shield-lock me-2" aria-hidden="true"></i>
-                                Thanh toán mô phỏng chỉ khả dụng trong môi trường local/testing.
+                        <div class="payment-sandbox mb-4">
+                            <div class="payment-sandbox-head">
+                                <i class="bi bi-shield-lock" aria-hidden="true"></i>
+                                <div>
+                                    <h3 class="h6 mb-1">Chọn cổng thanh toán</h3>
+                                    <p class="mb-0">Bạn sẽ được chuyển tới cổng thanh toán để hoàn tất giao dịch. Vé chỉ được xác nhận khi máy chủ nhận và xác minh kết quả từ cổng.</p>
+                                </div>
                             </div>
-
-                            <form method="POST"
-                                  action="{{ route('bookings.payment.process', $booking) }}"
-                                  class="mb-4">
-                                @csrf
-
-                                <button type="submit" class="btn btn-success">
-                                    <i class="bi bi-check-circle me-2" aria-hidden="true"></i>
-                                    Thanh toán vé và bắp nước
-                                </button>
-                            </form>
-                        @else
-                            <div class="alert alert-warning" role="status">
-                                Thanh toán mô phỏng không khả dụng trong môi trường này.
-                            </div>
-                        @endif
+                            @forelse ($gateways ?? [] as $gateway)
+                                <form method="POST" action="{{ route('bookings.payment.process', $booking) }}" class="mb-2">
+                                    @csrf
+                                    <input type="hidden" name="gateway" value="{{ $gateway['name'] }}" />
+                                    <div class="d-flex flex-wrap gap-2 align-items-center">
+                                        <span class="text-secondary me-1">{{ $gateway['label'] }}:</span>
+                                        @foreach ($gateway['methods'] as $methodValue => $methodLabel)
+                                            <button type="submit" name="method" value="{{ $methodValue }}" class="btn btn-success">
+                                                <i class="bi bi-qr-code-scan me-2" aria-hidden="true"></i>{{ $methodLabel }}
+                                            </button>
+                                        @endforeach
+                                    </div>
+                                </form>
+                            @empty
+                                <div class="alert alert-danger mb-0">Chưa có cổng thanh toán nào được bật. Liên hệ quản trị viên.</div>
+                            @endforelse
+                        </div>
                     </div>
 
-                    {{-- TỔNG TIỀN --}}
+{{-- TỔNG TIỀN --}}
                     <div class="d-flex flex-column flex-sm-row justify-content-between align-items-sm-center gap-3 mt-3 pt-3 border-top border-secondary">
                         <div>
                             <p class="mb-1 text-secondary">Tổng thanh toán</p>

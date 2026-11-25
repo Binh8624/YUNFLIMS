@@ -10,6 +10,8 @@ use App\Models\Movie;
 use App\Models\Room;
 use App\Models\Seat;
 use App\Models\Showtime;
+use App\Services\Payment\PaymentService;
+use App\Services\Payment\RefundService;
 use App\Services\ShowtimeRules;
 use App\Services\SingleSeatRule;
 use App\Services\TicketPriceCalculator;
@@ -429,14 +431,7 @@ private function customerScheduleQuery(array $filters): Builder
                     ]);
                 }
 
-                Booking::where('showtime_id', $lockedShowtime->id)
-                    ->where('status', 'pending')
-                    ->whereNotNull('hold_expires_at')
-                    ->where('hold_expires_at', '<=', now())
-                    ->update([
-                        'status' => 'cancelled',
-                        'payment_status' => 'cancelled',
-                    ]);
+                Booking::releaseExpiredHolds();
 
                 $seats = Seat::whereIn('id', $validated['seats'])
                     ->where('room_id', $lockedShowtime->room_id)
@@ -708,10 +703,7 @@ public function saveConcessions(Request $request, Booking $booking)
         }
 
         if (! $booking->hold_expires_at || $booking->hold_expires_at->isPast()) {
-            $booking->update([
-                'status' => 'cancelled',
-                'payment_status' => 'cancelled',
-            ]);
+            Booking::releaseExpiredHolds();
 
             return redirect()->route('bookings.show', $booking)
                 ->withErrors(['payment' => 'Thời gian giữ ghế đã hết. Vui lòng đặt lại ghế.']);
@@ -723,369 +715,88 @@ public function saveConcessions(Request $request, Booking $booking)
             'bookingSeats.seat',
         ]);
 
-        $mockPaymentEnabled = $this->mockPaymentEnabled();
+        $gateways = app(PaymentService::class)->enabledGateways();
 
-        return view('bookings.payment', compact('booking', 'mockPaymentEnabled'));
+        return view('bookings.payment', compact('booking', 'gateways'));
     }
 
-    
-public function cancel(Booking $booking)
-{
-    abort_unless($booking->user_id === auth()->id(), 403);
-
-    $result = DB::transaction(function () use ($booking) {
-        $lockedBooking = Booking::whereKey($booking->id)
-            ->lockForUpdate()
-            ->firstOrFail();
-
-        if (
-            ! (
-                $lockedBooking->status === 'pending'
-                || (
-                    $lockedBooking->status === 'confirmed'
-                    && $lockedBooking->payment_status === 'paid'
-                )
-            )
-        ) {
-            return 'invalid';
-        }
-
-        $concessionOrder = ConcessionOrder::where(
-            'booking_id',
-            $lockedBooking->id
-        )
-            ->lockForUpdate()
-            ->first();
-
-        // Không hủy booking nếu bắp nước đã được chuẩn bị hoặc hoàn tất.
-        if (
-            $concessionOrder
-            && in_array($concessionOrder->status, ['preparing', 'completed'], true)
-        ) {
-            return 'concession_processing';
-        }
-
-        // Booking chưa thanh toán.
-        if ($lockedBooking->status === 'pending') {
-            $lockedBooking->update([
-                'status' => 'cancelled',
-                'payment_status' => 'cancelled',
-                'ticket_status' => 'cancelled',
-            ]);
-
-            if ($concessionOrder) {
-                $concessionOrder->update([
-                    'status' => 'cancelled',
-                    'payment_status' => 'cancelled',
-                ]);
-            }
-
-            return 'cancelled';
-        }
-
-        // Booking đã thanh toán, bắp nước chưa được chuẩn bị.
-        if ($concessionOrder && $concessionOrder->status === 'confirmed') {
-            $concessionOrder->load('items');
-
-            $items = $concessionOrder->items;
-
-            // Gom số lượng theo sản phẩm.
-            $quantities = $items
-                ->filter(fn ($item) => $item->concession_product_id !== null)
-                ->groupBy('concession_product_id')
-                ->map(fn ($group) => (int) $group->sum('quantity'));
-
-            // Khóa sản phẩm theo thứ tự ID để hạn chế deadlock.
-            $products = ConcessionProduct::query()
-                ->whereIn('id', $quantities->keys())
-                ->orderBy('id')
-                ->lockForUpdate()
-                ->get()
-                ->keyBy('id');
-
-            // Hoàn lại kho.
-            foreach ($quantities as $productId => $quantity) {
-                $product = $products->get($productId);
-
-                if ($product && $quantity > 0) {
-                    $product->increment('stock_quantity', $quantity);
-                }
-            }
-
-            $concessionOrder->update([
-                'status' => 'cancelled',
-                'payment_status' => 'refunded',
-            ]);
-        } elseif ($concessionOrder) {
-            // Trường hợp đơn bắp nước không còn ở trạng thái confirmed.
-            $concessionOrder->update([
-                'status' => 'cancelled',
-                'payment_status' => 'refunded',
-            ]);
-        }
-
-        $lockedBooking->update([
-            'status' => 'cancelled',
-            'payment_status' => 'refunded',
-            'ticket_status' => 'cancelled',
-        ]);
-
-        return 'cancelled';
-    });
-
-    if ($result === 'invalid') {
-        return redirect()
-            ->route('bookings.show', $booking)
-            ->withErrors([
-                'booking' => 'Đơn đặt vé này không còn ở trạng thái có thể hủy.',
-            ]);
-    }
-
-    if ($result === 'concession_processing') {
-        return redirect()
-            ->route('bookings.show', $booking)
-            ->withErrors([
-                'booking' => 'Bắp nước đã được chuẩn bị hoặc hoàn tất. Không thể tự hủy toàn bộ đơn hàng.',
-            ]);
-    }
-
-    return redirect()
-        ->route('bookings.show', $booking)
-        ->with('success', 'Đã hủy đơn đặt vé và xử lý đơn bắp nước đi kèm.');
-}
-
-    
-public function processPayment(Request $request, Booking $booking)
-{
-    abort_unless(
-        $this->mockPaymentEnabled(),
-        403,
-        'Thanh toán mô phỏng không được bật trong môi trường này.'
-    );
-
-    abort_unless($booking->user_id === auth()->id(), 403);
-
-    $request->validate([
-        'payment_result' => ['prohibited'],
-        'payment_status' => ['prohibited'],
-        'payment_method' => [
-            'sometimes',
-            'required',
-            Rule::in([self::MOCK_PAYMENT_METHOD]),
-        ],
-    ]);
-
-    $processingResult = DB::transaction(function () use ($booking) {
-        $lockedBooking = Booking::whereKey($booking->id)
-            ->lockForUpdate()
-            ->firstOrFail();
-
-        // Không xử lý thanh toán lần thứ hai.
-        if (
-            $lockedBooking->status === 'confirmed'
-            && $lockedBooking->payment_status === 'paid'
-        ) {
-            return [
-                'redirect' => route('bookings.show', $lockedBooking),
-                'with' => [
-                    'success' => 'Booking này đã được thanh toán trước đó.',
-                ],
-            ];
-        }
-
-        if (
-            $lockedBooking->status !== 'pending'
-            || $lockedBooking->payment_status === 'paid'
-        ) {
-            return [
-                'redirect' => route('bookings.show', $lockedBooking),
-                'with' => [
-                    'errors' => [
-                        'payment' => 'Booking đã bị hủy hoặc giao dịch đã được xử lý.',
-                    ],
-                ],
-            ];
-        }
-
-        // Kiểm tra thời gian giữ ghế.
-        if (
-            ! $lockedBooking->hold_expires_at
-            || $lockedBooking->hold_expires_at->isPast()
-        ) {
-            $lockedBooking->update([
-                'status' => 'cancelled',
-                'payment_status' => 'timeout',
-                'ticket_status' => 'cancelled',
-            ]);
-
-            ConcessionOrder::where('booking_id', $lockedBooking->id)
-                ->where('payment_status', 'pending')
-                ->update([
-                    'status' => 'cancelled',
-                    'payment_status' => 'cancelled',
-                ]);
-
-            return [
-                'redirect' => route('bookings.show', $lockedBooking),
-                'with' => [
-                    'errors' => [
-                        'payment' => 'Thời gian giữ ghế đã hết. Vui lòng đặt lại ghế.',
-                    ],
-                ],
-            ];
-        }
-
-        // Lấy đơn bắp nước gắn với booking.
-        $concessionOrder = ConcessionOrder::where(
-            'booking_id',
-            $lockedBooking->id
-        )
-            ->lockForUpdate()
-            ->first();
-
-        $products = collect();
-
-        if ($concessionOrder) {
-            $concessionOrder->load('items');
-
-            $items = $concessionOrder->items;
-
-            // Kiểm tra dữ liệu sản phẩm.
-            if ($items->contains(function ($item) {
-                return ! $item->concession_product_id
-                    || $item->quantity < 1;
-            })) {
-                return [
-                    'redirect' => route('bookings.payment', $lockedBooking),
-                    'with' => [
-                        'errors' => [
-                            'payment' => 'Có sản phẩm bắp nước không hợp lệ. Vui lòng kiểm tra lại đơn hàng.',
-                        ],
-                    ],
-                ];
-            }
-
-            // Gom số lượng theo ID sản phẩm.
-            $quantities = $items
-                ->groupBy('concession_product_id')
-                ->map(fn ($group) => (int) $group->sum('quantity'));
-
-            // Khóa tất cả sản phẩm theo thứ tự ID.
-            $products = ConcessionProduct::query()
-                ->whereIn('id', $quantities->keys())
-                ->orderBy('id')
-                ->lockForUpdate()
-                ->get()
-                ->keyBy('id');
-
-            // Kiểm tra toàn bộ tồn kho trước khi trừ bất kỳ sản phẩm nào.
-            foreach ($quantities as $productId => $quantity) {
-                $product = $products->get($productId);
-
-                if (
-                    ! $product
-                    || ! $product->is_active
-                    || $product->stock_quantity < $quantity
-                ) {
-                    $productName = $items
-                        ->firstWhere('concession_product_id', $productId)
-                        ?->product_name ?? 'Sản phẩm bắp nước';
-
-                    return [
-                        'redirect' => route('bookings.payment', $lockedBooking),
-                        'with' => [
-                            'errors' => [
-                                'payment' => 'Sản phẩm "' . $productName
-                                    . '" không còn đủ số lượng. Vui lòng quay lại chọn sản phẩm khác.',
-                            ],
-                        ],
-                    ];
-                }
-            }
-
-            // Tất cả sản phẩm hợp lệ mới bắt đầu trừ tồn kho.
-            foreach ($quantities as $productId => $quantity) {
-                $products->get($productId)->decrement(
-                    'stock_quantity',
-                    $quantity
-                );
-            }
-        }
-
-        // Tạo mã giao dịch chung cho vé và bắp nước.
-        $reference = $lockedBooking->payment_reference
-            ?: 'YF-REF-' . strtoupper(
-                \Illuminate\Support\Str::random(12)
-            );
-
-        // Xác nhận thanh toán booking.
-        $lockedBooking->update([
-            'payment_method' => self::MOCK_PAYMENT_METHOD,
-            'payment_reference' => $reference,
-            'payment_status' => 'paid',
-            'paid_at' => now(),
-            'status' => 'confirmed',
-            'ticket_status' => 'available',
-        ]);
-
-        // Đồng bộ trạng thái đơn bắp nước.
-        // Không tạo giao dịch thanh toán riêng.
-        if ($concessionOrder) {
-            $concessionOrder->update([
-                'status' => 'confirmed',
-                'payment_method' => self::MOCK_PAYMENT_METHOD,
-                'payment_status' => 'paid',
-                'payment_reference' => $reference,
-                'paid_at' => now(),
-            ]);
-        }
-
-        // Chỉ tính điểm thành viên dựa trên tiền vé.
-        $ticketTotal = (float) BookingSeat::where(
-            'booking_id',
-            $lockedBooking->id
-        )->sum('price');
-
-        $user = $lockedBooking->user()->first();
-
-        if ($user) {
-            $pointsEarned = max(
-                10,
-                (int) round($ticketTotal / 10000)
-            );
-
-            $user->loyalty_points = ($user->loyalty_points ?? 0)
-                + $pointsEarned;
-
-            $user->member_tier = \App\Models\User::resolveMemberTier(
-                $user->loyalty_points
-            );
-
-            $user->save();
-        }
-
-        return [
-            'redirect' => route('bookings.show', $lockedBooking),
-            'with' => [
-                'success' => 'Thanh toán thành công. Vé và bắp nước đã được xác nhận.',
-            ],
-        ];
-    });
-
-    // Xử lý kết quả transaction.
-    if (isset($processingResult['with']['errors'])) {
-        return redirect($processingResult['redirect'])
-            ->withErrors($processingResult['with']['errors']);
-    }
-
-    return redirect($processingResult['redirect'])
-        ->with($processingResult['with']);
-}
-
-
-    private function mockPaymentEnabled(): bool
+    public function cancel(Request $request, Booking $booking, RefundService $refunds)
     {
-        return app()->environment(['local', 'testing']);
+        abort_unless($booking->user_id === auth()->id(), 403);
+
+        $validated = $request->validate([
+            'reason' => ['nullable', 'string', 'max:500'],
+        ]);
+        $reason = $validated['reason'] ?? 'Khách yêu cầu hủy vé';
+
+        $concessionOrder = ConcessionOrder::where('booking_id', $booking->id)->first();
+        if ($concessionOrder && in_array($concessionOrder->status, ['preparing', 'completed'], true)) {
+            return redirect()->route('bookings.show', $booking)
+                ->withErrors(['booking' => 'Bắp nước đã được chuẩn bị hoặc hoàn tất. Không thể tự hủy toàn bộ đơn hàng.']);
+        }
+
+        if ($booking->status === 'pending') {
+            DB::transaction(function () use ($booking, $reason) {
+                $lockedBooking = Booking::whereKey($booking->id)->lockForUpdate()->firstOrFail();
+                if ($lockedBooking->status !== 'pending') {
+                    throw ValidationException::withMessages([
+                        'booking' => 'Đơn đặt vé này không còn ở trạng thái chờ thanh toán.',
+                    ]);
+                }
+
+                $lockedBooking->update([
+                    'status' => 'cancelled',
+                    'payment_status' => 'cancelled',
+                    'ticket_status' => 'cancelled',
+                    'cancelled_at' => now(),
+                    'cancelled_by' => auth()->id(),
+                    'cancel_reason' => $reason,
+                ]);
+
+                $concessionOrder = ConcessionOrder::where('booking_id', $lockedBooking->id)
+                    ->lockForUpdate()
+                    ->first();
+                if ($concessionOrder) {
+                    $concessionOrder->update([
+                        'status' => 'cancelled',
+                        'payment_status' => 'cancelled',
+                    ]);
+                }
+
+                BookingSeat::where('booking_id', $lockedBooking->id)
+                    ->whereNull('released_at')
+                    ->update(['released_at' => now()]);
+            });
+
+            return redirect()->route('bookings.show', $booking)
+                ->with('success', 'Đã hủy đơn đặt vé và giải phóng các ghế đang giữ.');
+        }
+
+        $refund = $refunds->request($booking, $request->user(), $reason);
+
+        if ($refund->status === \App\Models\PaymentRefund::STATUS_SUCCEEDED) {
+            $this->restockConcessionOrder($booking);
+            return redirect()->route('bookings.show', $booking)
+                ->with('success', 'Đã hủy vé và hoàn tiền thành công. Điểm thưởng tương ứng đã được thu hồi.');
+        }
+
+        return redirect()->route('bookings.show', $booking)
+            ->withErrors(['booking' => 'Yêu cầu hoàn tiền thất bại. Vé giữ nguyên trạng thái, vui lòng thử lại hoặc liên hệ hỗ trợ.']);
+    }
+
+    public function processPayment(Request $request, Booking $booking, PaymentService $payments)
+    {
+        abort_unless($booking->user_id === auth()->id(), 403);
+
+        $enabled = collect($payments->enabledGateways())->pluck('name')->all();
+        $validated = $request->validate([
+            'gateway' => ['required', 'string', Rule::in($enabled)],
+            'method' => ['nullable', 'string', 'max:50'],
+        ]);
+
+        $payment = $payments->initiate($booking, $validated['gateway'], $validated['method'] ?? null);
+
+        return redirect()->away($payments->gateway($validated['gateway'])->createPaymentUrl($payment));
     }
 
     public function show(Booking $booking)
@@ -1105,43 +816,67 @@ public function processPayment(Request $request, Booking $booking)
         return view('bookings.show', compact('booking'));
     }
 
-   
-private function expirePendingHolds(): void
-{
-    DB::transaction(function () {
-        // Lấy các booking đã hết thời gian giữ ghế.
-        $expiredBookings = Booking::query()
-            ->where('status', 'pending')
+    private function expirePendingHolds(): void
+    {
+        $expiredIds = Booking::where('status', 'pending')
             ->whereNotNull('hold_expires_at')
             ->where('hold_expires_at', '<=', now())
-            ->orderBy('id')
-            ->lockForUpdate()
-            ->get(['id']);
+            ->pluck('id');
 
-        if ($expiredBookings->isEmpty()) {
+        if ($expiredIds->isEmpty()) {
             return;
         }
 
-        $bookingIds = $expiredBookings->pluck('id');
+        Booking::releaseExpiredHolds();
 
-        // Hủy booking và giải phóng trạng thái ghế.
-        Booking::whereIn('id', $bookingIds)
-            ->where('status', 'pending')
-            ->update([
-                'status' => 'cancelled',
-                'payment_status' => 'timeout',
-                'ticket_status' => 'cancelled',
-            ]);
-
-        // Hủy các đơn bắp nước chưa thanh toán đi kèm.
-        ConcessionOrder::whereIn('booking_id', $bookingIds)
-            ->where('payment_status', 'pending')
+        ConcessionOrder::whereIn('booking_id', $expiredIds)
+            ->whereIn('payment_status', ['pending', 'unpaid'])
             ->update([
                 'status' => 'cancelled',
                 'payment_status' => 'cancelled',
             ]);
-    });
-}
+    }
+
+    private function restockConcessionOrder(Booking $booking): void
+    {
+        DB::transaction(function () use ($booking) {
+            $concessionOrder = ConcessionOrder::where('booking_id', $booking->id)
+                ->lockForUpdate()
+                ->first();
+
+            if (! $concessionOrder || $concessionOrder->status === 'cancelled') {
+                return;
+            }
+
+            $concessionOrder->load('items');
+            $items = $concessionOrder->items;
+            $quantities = $items
+                ->filter(fn ($item) => $item->concession_product_id !== null)
+                ->groupBy('concession_product_id')
+                ->map(fn ($group) => (int) $group->sum('quantity'));
+
+            if ($quantities->isNotEmpty()) {
+                $products = ConcessionProduct::query()
+                    ->whereIn('id', $quantities->keys())
+                    ->orderBy('id')
+                    ->lockForUpdate()
+                    ->get()
+                    ->keyBy('id');
+
+                foreach ($quantities as $productId => $quantity) {
+                    $product = $products->get($productId);
+                    if ($product && $quantity > 0) {
+                        $product->increment('stock_quantity', $quantity);
+                    }
+                }
+            }
+
+            $concessionOrder->update([
+                'status' => 'cancelled',
+                'payment_status' => 'refunded',
+            ]);
+        });
+    }
 
 
     private function occupiedSeatIds(int $showtimeId): array

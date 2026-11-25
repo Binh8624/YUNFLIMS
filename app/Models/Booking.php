@@ -27,6 +27,10 @@ class Booking extends Model
         'ticket_status',
         'ticket_used_at',
         'checkin_count',
+        'cancelled_at',
+        'cancelled_by',
+        'cancel_reason',
+        'points_earned',
     ];
 
     protected function casts(): array
@@ -59,6 +63,37 @@ class Booking extends Model
             ->getString();
     }
 
+    public static function releaseExpiredHolds(): int
+    {
+        $expiredIds = self::where('status', 'pending')
+            ->whereNotNull('hold_expires_at')
+            ->where('hold_expires_at', '<=', now())
+            ->pluck('id');
+
+        if ($expiredIds->isEmpty()) {
+            return 0;
+        }
+
+        self::whereIn('id', $expiredIds)->update([
+            'status' => 'cancelled',
+            'payment_status' => 'timeout',
+        ]);
+        Payment::whereIn('booking_id', $expiredIds)
+            ->where('status', Payment::STATUS_PENDING)
+            ->update(['status' => Payment::STATUS_TIMEOUT]);
+        BookingSeat::whereIn('booking_id', $expiredIds)
+            ->whereNull('released_at')
+            ->update(['released_at' => now()]);
+        \App\Models\ConcessionOrder::whereIn('booking_id', $expiredIds)
+            ->whereIn('payment_status', ['pending', 'unpaid'])
+            ->update([
+                'status' => 'cancelled',
+                'payment_status' => 'cancelled',
+            ]);
+
+        return $expiredIds->count();
+    }
+
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
@@ -75,7 +110,17 @@ class Booking extends Model
     }
 
     public function concessionOrder(): HasOne
-{
-    return $this->hasOne(ConcessionOrder::class);
-}
+    {
+        return $this->hasOne(ConcessionOrder::class);
+    }
+
+    public function payments(): HasMany
+    {
+        return $this->hasMany(Payment::class);
+    }
+
+    public function refunds(): HasMany
+    {
+        return $this->hasMany(PaymentRefund::class);
+    }
 }

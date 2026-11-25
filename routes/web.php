@@ -22,6 +22,7 @@ use App\Http\Controllers\AuthController;
 use App\Http\Controllers\BookingController;
 use App\Http\Controllers\FavoriteController;
 use App\Http\Controllers\HomeController;
+use App\Http\Controllers\PaymentCallbackController;
 use App\Http\Controllers\ReviewController;
 use App\Http\Controllers\ServiceController;
 use App\Http\Controllers\TicketVerificationController;
@@ -119,6 +120,15 @@ Route::post('/logout', [AuthController::class, 'logout'])
     ->middleware('auth')
     ->name('logout');
 
+Route::get('/payment/return/{gateway}', [PaymentCallbackController::class, 'return'])
+    ->middleware('throttle:60,1')
+    ->name('payment.return');
+
+Route::match(['get', 'post'], '/payment/webhook/{gateway}', [PaymentCallbackController::class, 'webhook'])
+    ->middleware('throttle:120,1')
+    ->name('payment.webhook');
+
+
 Route::post('/movies/{movie}/reviews', [ReviewController::class, 'store'])
     ->middleware(['auth', 'active', 'throttle:10,1'])
     ->name('movies.reviews.store');
@@ -187,9 +197,20 @@ Route::middleware(['auth', 'active'])->group(function () {
         ->middleware('throttle:10,1')
         ->name('bookings.payment.process');
 
+    Route::get('/payment/mock/{payment}/checkout', [
+        PaymentCallbackController::class,
+        'mockCheckout',
+    ])->name('payment.mock.checkout');
+
+    Route::post('/payment/mock/{payment}/simulate', [
+        PaymentCallbackController::class,
+        'mockSimulate',
+    ])->middleware('throttle:10,1')->name('payment.mock.simulate');
+
     // Booking details
     Route::get('/bookings/{booking}', [BookingController::class, 'show'])
         ->name('bookings.show');
+
 });
 
 /*

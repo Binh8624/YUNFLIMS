@@ -274,6 +274,11 @@ class User extends Authenticatable
             ->withTimestamps();
     }
 
+    public function pointTransactions(): HasMany
+    {
+        return $this->hasMany(LoyaltyPointTransaction::class);
+    }
+
     public function isFavoriteMovie(Movie $movie): bool
     {
         return $this->favoriteMovies()

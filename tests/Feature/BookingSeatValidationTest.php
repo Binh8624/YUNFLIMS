@@ -206,16 +206,27 @@ class BookingSeatValidationTest extends TestCase
 
         $this->from(route('bookings.payment', $booking))
             ->post(route('bookings.payment.process', $booking), [
-                'payment_method' => 'mock_test',
+                'gateway' => 'mock',
+                'method' => 'mock',
             ])
-            ->assertRedirect(route('bookings.show', $booking))
-            ->assertSessionHas('success');
+            ->assertRedirect();
+
+        $payment = \App\Models\Payment::where('booking_id', $booking->id)->firstOrFail();
+        $payload = [
+            'order_ref' => $payment->order_ref,
+            'transaction_code' => 'MOCK-TEST',
+            'amount' => (string) $payment->amount,
+            'status' => 'success',
+            'nonce' => Str::random(8),
+        ];
+        $payload['signature'] = (new \App\Services\Payment\MockGateway)->sign($payload);
+        $this->postJson(route('payment.webhook', ['gateway' => 'mock']), $payload)->assertOk();
 
         $booking->refresh();
 
         $this->assertSame('confirmed', $booking->status);
         $this->assertSame('paid', $booking->payment_status);
-        $this->assertSame('mock_test', $booking->payment_method);
+        $this->assertSame('mock', $booking->payment_method);
         $this->assertSame('available', $booking->ticket_status);
         $this->assertDatabaseHas('bookings', [
             'id' => $booking->id,
