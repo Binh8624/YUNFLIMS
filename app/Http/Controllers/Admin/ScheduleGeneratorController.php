@@ -7,8 +7,10 @@ use App\Models\Format;
 use App\Models\Movie;
 use App\Models\Room;
 use App\Models\Showtime;
+use App\Services\ShowtimeRules;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -18,14 +20,28 @@ class ScheduleGeneratorController extends Controller
 
     public function index()
     {
+        $roomsQuery = Room::with(['cinema', 'format', 'formats'])
+            ->where('is_active', true)
+            ->whereHas('cinema', fn ($query) => $query->where('is_active', true));
+
+        if (! request()->user()->canManageCinema(null)) {
+            $roomsQuery->where('cinema_id', request()->user()->cinema_id);
+        }
+
         return view('admin.showtimes.auto', [
-            'movies' => Movie::where('status', '!=', 'inactive')->orderBy('title')->get(),
-            'rooms' => Room::with(['cinema', 'formats'])
-                ->where('is_active', true)
-                ->whereHas('cinema', fn ($query) => $query->where('is_active', true))
+            'movies' => Movie::with(['format', 'formats'])
+                ->where('status', '!=', 'inactive')
+                ->orderBy('title')
+                ->get(),
+            'rooms' => $roomsQuery
                 ->orderBy('name')
                 ->get(),
-            'formats' => Format::where('is_active', true)->orderBy('name')->get(),
+
+            'formats' => Format::whereIn('slug', ['2d', '3d', 'imax'])
+                ->where('is_active', true)
+                ->orderBy('name')
+                ->get(),
+
             'preview' => session('schedule_preview'),
         ]);
     }
@@ -33,9 +49,11 @@ class ScheduleGeneratorController extends Controller
     public function preview(Request $request)
     {
         $data = $this->validated($request);
-        $plan = $this->buildPlan($data);
+        $rooms = $this->roomsFor($data);
+        $plan = $this->buildPlan($data, $rooms);
 
-        return redirect()->route('admin.showtimes.auto')
+        return redirect()
+            ->route('admin.showtimes.auto')
             ->withInput()
             ->with('schedule_preview', $plan);
     }
@@ -43,63 +61,79 @@ class ScheduleGeneratorController extends Controller
     public function store(Request $request)
     {
         $data = $this->validated($request);
-        $created = DB::transaction(function () use ($data) {
-            $rooms = Room::whereIn('id', $data['room_ids'])->lockForUpdate()->get();
-            Movie::whereKey($data['movie_id'])->lockForUpdate()->firstOrFail();
-            $created = [];
 
-            foreach ($this->candidates($data, $rooms) as $candidate) {
-                $conflict = Showtime::where('room_id', $candidate['room_id'])
-                    ->where('status', 'scheduled')
-                    ->where('starts_at', '<', $candidate['blocked_until'])
-                    ->where(
-                        'ends_at',
-                        '>',
-                        Carbon::parse($candidate['starts_at'])
-                            ->subMinutes(self::CLEANUP_MINUTES)
-                            ->toDateTimeString()
-                    )
-                    ->lockForUpdate()
-                    ->exists();
+        $result = DB::transaction(function () use ($data) {
+            $rooms = $this->roomsFor($data, true);
 
-                if ($conflict) {
-                    continue;
-                }
+            Movie::whereKey($data['movie_id'])
+                ->lockForUpdate()
+                ->firstOrFail();
 
-                $created[] = Showtime::create([
+            $plan = $this->buildPlan($data, $rooms, true);
+
+            $created = collect($plan['accepted'])
+                ->map(fn (array $candidate) => Showtime::create([
                     'movie_id' => $data['movie_id'],
                     'room_id' => $candidate['room_id'],
                     'format_id' => $data['format_id'],
                     'starts_at' => $candidate['starts_at'],
                     'ends_at' => $candidate['ends_at'],
                     'price' => $data['price'],
+                    'vip_price' => $data['vip_price'],
+                    'couple_price' => $data['couple_price'],
                     'status' => 'scheduled',
-                ]);
-            }
+                ]))
+                ->all();
 
-            return $created;
+            return [
+                'created' => $created,
+                'skipped' => count($plan['skipped']),
+            ];
         });
 
-        return redirect()->route('admin.showtimes.index')
-            ->with('success', count($created) . ' suất chiếu được tạo; các khung giờ xung đột đã được bỏ qua.');
+        return redirect()
+            ->route('admin.showtimes.index')
+            ->with(
+                'success',
+                count($result['created']).' suất chiếu được tạo; '.$result['skipped'].' suất bị bỏ qua.'
+            );
     }
 
     private function validated(Request $request): array
     {
-        $data = $request->validate([
+        $rules = [
             'movie_id' => ['required', 'integer', 'exists:movies,id'],
             'format_id' => ['required', 'integer', 'exists:formats,id,is_active,1'],
-            'room_ids' => ['required', 'array', 'min:1', 'max:10'],
-            'room_ids.*' => ['required', 'integer', 'distinct', 'exists:rooms,id'],
+            'auto_allocate' => ['nullable', 'boolean'],
             'starts_on' => ['required', 'date', 'after_or_equal:today'],
             'ends_on' => ['required', 'date', 'after_or_equal:starts_on'],
             'times' => ['required', 'array', 'min:1', 'max:8'],
             'times.*' => ['required', 'date_format:H:i', 'distinct'],
             'price' => ['required', 'numeric', 'min:0', 'max:99999999.99'],
-        ]);
+            'vip_price' => ['required', 'numeric', 'min:0', 'max:99999999.99'],
+            'couple_price' => ['required', 'numeric', 'min:0', 'max:99999999.99'],
+        ];
 
-        $days = Carbon::parse($data['starts_on'])->diffInDays(Carbon::parse($data['ends_on'])) + 1;
-        if ($days > 31 || $days * count($data['room_ids']) * count($data['times']) > 500) {
+        if (! $request->boolean('auto_allocate')) {
+            $rules['room_ids'] = ['required', 'array', 'min:1', 'max:10'];
+            $rules['room_ids.*'] = [
+                'required',
+                'integer',
+                'distinct',
+                'exists:rooms,id',
+            ];
+        }
+
+        $data = $request->validate($rules);
+        $data['auto_allocate'] = $request->boolean('auto_allocate');
+
+        $days = Carbon::parse($data['starts_on'])
+            ->diffInDays(Carbon::parse($data['ends_on'])) + 1;
+
+        $requestedSlotsPerDay = count($data['times'])
+            * ($data['auto_allocate'] ? 1 : count($data['room_ids']));
+
+        if ($days > 31 || $days * $requestedSlotsPerDay > 500) {
             throw ValidationException::withMessages([
                 'ends_on' => 'Tạo lịch tối đa 31 ngày và 500 khung giờ cùng lúc.',
             ]);
@@ -108,34 +142,208 @@ class ScheduleGeneratorController extends Controller
         return $data;
     }
 
-    private function buildPlan(array $data): array
-    {
-        $rooms = Room::with('formats')->whereIn('id', $data['room_ids'])->get();
-        $candidates = $this->candidates($data, $rooms);
+    private function roomsFor(
+        array $data,
+        bool $lockForUpdate = false
+    ): Collection {
+        $rooms = Room::with([
+            'cinema',
+            'format',
+            'formats',
+        ]);
+
+        if (! request()->user()->canManageCinema(null)) {
+            $rooms->where('cinema_id', request()->user()->cinema_id);
+        }
+
+        if ($data['auto_allocate']) {
+            $rooms
+                ->where('is_active', true)
+                ->whereHas('formats', fn ($query) => $query
+                    ->where('formats.id', $data['format_id'])
+                    ->where('formats.is_active', true)
+                )
+                ->whereHas('cinema', fn ($query) => $query
+                    ->where('is_active', true)
+                );
+        } else {
+            $rooms->whereIn('id', $data['room_ids']);
+        }
+
+        return $rooms
+            ->orderBy('id')
+            ->when(
+                $lockForUpdate,
+                fn ($query) => $query->lockForUpdate()
+            )
+            ->get();
+    }
+
+    private function buildPlan(
+        array $data,
+        Collection $rooms,
+        bool $lockExisting = false
+    ): array {
+        $movie = Movie::with([
+            'format',
+            'formats',
+        ])->findOrFail($data['movie_id']);
+
+        $format = Format::findOrFail($data['format_id']);
+
+        // Kiểm tra phim có hỗ trợ định dạng của suất chiếu hay không.
+        $movieSupportsFormat = $movie->formats->contains(
+            fn (Format $movieFormat) =>
+                (int) $movieFormat->id === (int) $format->id
+                && $movieFormat->is_active
+        );
+
+        if (
+            $movie->status === 'inactive'
+            || ! $format->is_active
+            || ! in_array($format->slug, ['2d', '3d', 'imax'], true)
+            || ! $movieSupportsFormat
+        ) {
+            throw ValidationException::withMessages([
+                'format_id' => 'Phim không hỗ trợ định dạng suất chiếu đã chọn.',
+            ]);
+        }
+
+        // Chỉ giữ những phòng có hỗ trợ định dạng đã chọn.
+        $compatibleRooms = $rooms->filter(
+            fn (Room $room) =>
+                $room->is_active
+                && $room->cinema?->is_active
+                && $room->formats->contains(
+                    fn (Format $roomFormat) =>
+                        (int) $roomFormat->id === (int) $format->id
+                        && $roomFormat->is_active
+                )
+        );
+
+        if ($compatibleRooms->isEmpty()) {
+            throw ValidationException::withMessages([
+                $data['auto_allocate'] ? 'format_id' : 'room_ids'
+                    => 'Không có phòng đang hoạt động hỗ trợ định dạng này.',
+            ]);
+        }
+
+        if (
+            ! $data['auto_allocate']
+            && $compatibleRooms->count() !== $rooms->count()
+        ) {
+            throw ValidationException::withMessages([
+                'room_ids' => 'Một hoặc nhiều phòng đã chọn không hoạt động hoặc không hỗ trợ định dạng này.',
+            ]);
+        }
+
         $accepted = [];
         $skipped = [];
 
-        foreach ($candidates as $candidate) {
-            $conflict = Showtime::where('room_id', $candidate['room_id'])
-                ->where('status', 'scheduled')
-                ->where('starts_at', '<', $candidate['blocked_until'])
-                ->where(
-                    'ends_at',
-                    '>',
-                    Carbon::parse($candidate['starts_at'])
-                        ->subMinutes(self::CLEANUP_MINUTES)
-                        ->toDateTimeString()
-                )
-                ->exists();
+        $startDate = Carbon::parse($data['starts_on'])->startOfDay();
+        $endDate = Carbon::parse($data['ends_on'])->startOfDay();
+        $times = collect($data['times'])->sort()->values();
 
-            if ($conflict || collect($accepted)->contains(fn ($item) => $item['room_id'] === $candidate['room_id']
-                && $item['starts_at'] < $candidate['blocked_until']
-                && $item['blocked_until'] > $candidate['starts_at'])) {
-                $skipped[] = $candidate;
-                continue;
+        $windowStart = Carbon::parse(
+            $startDate->toDateString().' '.$times->first()
+        )->subMinutes(self::CLEANUP_MINUTES);
+
+        $windowEnd = Carbon::parse(
+            $endDate->toDateString().' '.$times->last()
+        )->addMinutes(
+            (int) $movie->duration + self::CLEANUP_MINUTES
+        );
+
+        $existingShowtimes = Showtime::query()
+            ->whereIn('room_id', $compatibleRooms->pluck('id'))
+            ->where('status', 'scheduled')
+            ->where('starts_at', '<', $windowEnd->toDateTimeString())
+            ->where('ends_at', '>', $windowStart->toDateTimeString())
+            ->when(
+                $lockExisting,
+                fn ($query) => $query->lockForUpdate()
+            )
+            ->get(['room_id', 'starts_at', 'ends_at']);
+
+        for (
+            $date = $startDate->copy();
+            $date->lte($endDate);
+            $date->addDay()
+        ) {
+            foreach ($times as $time) {
+                $startsAt = Carbon::parse(
+                    $date->toDateString().' '.$time
+                );
+
+                $endsAt = $startsAt->copy()
+                    ->addMinutes((int) $movie->duration);
+
+                if ($startsAt->isPast()) {
+                    if ($data['auto_allocate']) {
+                        $skipped[] = $this->skippedSlot(
+                            $startsAt,
+                            $endsAt,
+                            'Khung giờ đã qua.'
+                        );
+                    } else {
+                        foreach ($compatibleRooms as $room) {
+                            $skipped[] = [
+                                'room_id' => $room->id,
+                                'room_name' => $room->name,
+                                'cinema_name' => $room->cinema->name,
+                                'starts_at' => $startsAt->toDateTimeString(),
+                                'ends_at' => $endsAt->toDateTimeString(),
+                                'skip_reason' => 'Khung giờ đã qua.',
+                            ];
+                        }
+                    }
+
+                    continue;
+                }
+
+                $assigned = false;
+
+                foreach ($compatibleRooms as $room) {
+                    $candidate = [
+                        'room_id' => $room->id,
+                        'room_name' => $room->name,
+                        'cinema_name' => $room->cinema->name,
+                        'starts_at' => $startsAt->toDateTimeString(),
+                        'ends_at' => $endsAt->toDateTimeString(),
+                    ];
+
+                    if ($this->hasConflict(
+                        $candidate,
+                        $accepted,
+                        $existingShowtimes
+                    )) {
+                        if (! $data['auto_allocate']) {
+                            $skipped[] = [
+                                ...$candidate,
+                                'skip_reason' => 'Trùng lịch hoặc chưa đủ thời gian nghỉ.',
+                            ];
+                        }
+
+                        continue;
+                    }
+
+                    $accepted[] = $candidate;
+                    $assigned = true;
+
+                    // Tự động phân một phòng cho mỗi khung giờ.
+                    if ($data['auto_allocate']) {
+                        break;
+                    }
+                }
+
+                if ($data['auto_allocate'] && ! $assigned) {
+                    $skipped[] = $this->skippedSlot(
+                        $startsAt,
+                        $endsAt,
+                        'Không còn phòng tương thích đang trống.'
+                    );
+                }
             }
-
-            $accepted[] = $candidate;
         }
 
         return [
@@ -145,69 +353,52 @@ class ScheduleGeneratorController extends Controller
         ];
     }
 
-    private function candidates(array $data, $rooms): array
-    {
-        $movie = Movie::findOrFail($data['movie_id']);
-        $format = Format::findOrFail($data['format_id']);
+    private function hasConflict(
+        array $candidate,
+        array $accepted,
+        Collection $existingShowtimes
+    ): bool {
+        $conflictsWithDatabase = $existingShowtimes->contains(
+            fn (Showtime $existing) =>
+                (int) $existing->room_id === (int) $candidate['room_id']
+                && ShowtimeRules::overlaps(
+                    Carbon::parse($candidate['starts_at']),
+                    Carbon::parse($candidate['ends_at']),
+                    Carbon::parse($existing->starts_at),
+                    Carbon::parse($existing->ends_at),
+                    self::CLEANUP_MINUTES
+                )
+        );
 
-        if (
-            $movie->status === 'inactive'
-            || ! $format->is_active
-            || ! $movie->formats()->whereKey($format->id)->exists()
-        ) {
-            throw ValidationException::withMessages(['format_id' => 'Phim không hỗ trợ định dạng đã chọn.']);
-        }
-
-        $selectedRoomCount = $rooms->count();
-        $rooms = $rooms->filter(function ($room) use ($format) {
-            if (! $room->is_active || ! $room->cinema?->is_active) {
-                return false;
-            }
-
-            if (! $room->formats->contains('id', $format->id)) {
-                return false;
-            }
-
+        if ($conflictsWithDatabase) {
             return true;
-        });
-
-        if ($rooms->isEmpty()) {
-            throw ValidationException::withMessages(['room_ids' => 'Không có phòng đang hoạt động hỗ trợ định dạng này.']);
-        }
-        if ($rooms->count() !== $selectedRoomCount) {
-            throw ValidationException::withMessages([
-                'room_ids' => 'Một hoặc nhiều phòng đã chọn không hoạt động hoặc không hỗ trợ định dạng này.',
-            ]);
         }
 
-        $durationMinutes = (int) $movie->duration;
-        $candidates = [];
-        $startDate = Carbon::parse($data['starts_on'])->startOfDay();
-        $endDate = Carbon::parse($data['ends_on'])->startOfDay();
+        return collect($accepted)->contains(
+            fn (array $existing) =>
+                (int) $existing['room_id'] === (int) $candidate['room_id']
+                && ShowtimeRules::overlaps(
+                    Carbon::parse($candidate['starts_at']),
+                    Carbon::parse($candidate['ends_at']),
+                    Carbon::parse($existing['starts_at']),
+                    Carbon::parse($existing['ends_at']),
+                    self::CLEANUP_MINUTES
+                )
+        );
+    }
 
-        for ($date = $startDate->copy(); $date->lte($endDate); $date->addDay()) {
-            foreach ($rooms as $room) {
-                foreach ($data['times'] as $time) {
-                    $startsAt = Carbon::parse($date->toDateString() . ' ' . $time);
-                    if ($startsAt->isPast()) {
-                        continue;
-                    }
-
-                    $endsAt = $startsAt->copy()->addMinutes($durationMinutes);
-                    $candidates[] = [
-                        'room_id' => $room->id,
-                        'room_name' => $room->name,
-                        'cinema_name' => $room->cinema->name,
-                        'starts_at' => $startsAt->toDateTimeString(),
-                        'ends_at' => $endsAt->toDateTimeString(),
-                        'blocked_until' => $endsAt->copy()->addMinutes(self::CLEANUP_MINUTES)->toDateTimeString(),
-                    ];
-                }
-            }
-        }
-
-        usort($candidates, fn ($left, $right) => [$left['room_id'], $left['starts_at']] <=> [$right['room_id'], $right['starts_at']]);
-
-        return $candidates;
+    private function skippedSlot(
+        Carbon $startsAt,
+        Carbon $endsAt,
+        string $reason
+    ): array {
+        return [
+            'room_id' => null,
+            'room_name' => '—',
+            'cinema_name' => '—',
+            'starts_at' => $startsAt->toDateTimeString(),
+            'ends_at' => $endsAt->toDateTimeString(),
+            'skip_reason' => $reason,
+        ];
     }
 }

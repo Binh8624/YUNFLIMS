@@ -11,6 +11,10 @@ class PaymentController extends Controller
     public function index(Request $request)
     {
         $payments = Booking::with(['user', 'showtime.movie'])
+            ->when(! $request->user()->canManageCinema(null), fn ($query) => $query->whereHas(
+                'showtime.room',
+                fn ($room) => $room->where('cinema_id', $request->user()->cinema_id)
+            ))
             ->when($request->filled('payment_status'), fn ($query) => $query->where('payment_status', $request->input('payment_status')))
             ->when($request->filled('payment_method'), fn ($query) => $query->where('payment_method', $request->input('payment_method')))
             ->when($request->filled('search'), function ($query) use ($request) {

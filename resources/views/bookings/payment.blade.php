@@ -1,3 +1,4 @@
+
 @extends('layouts.app')
 
 @section('title', 'Thanh toán - YUNFLIMS')
@@ -6,12 +7,33 @@
 <div class="container py-5">
     <div class="row g-4 justify-content-center">
         <div class="col-lg-8">
-            <div class="card bg-dark text-white border-secondary">
+            <div class="card bg-dark text-white border-secondary cinema-panel">
                 <div class="card-body p-4">
-                    <h2 class="mb-4">Thanh toán vé</h2>
-                    <div class="alert alert-warning">
-                        Đây là mô phỏng thanh toán, chưa kết nối ngân hàng/cổng thanh toán. Ghế được giữ đến
-                        <strong>{{ $booking->hold_expires_at->format('d/m/Y H:i:s') }}</strong>.
+                    <div class="booking-step">
+                        <span class="booking-step-number">03</span>
+                        <div>
+                            <span class="hero-kicker">ĐẶT VÉ</span>
+                            <h1 class="h3 mb-0 mt-1">Thanh toán vé</h1>
+                        </div>
+                    </div>
+                    <div class="alert alert-warning d-flex gap-3" role="status">
+                        <i class="bi bi-clock-history fs-4" aria-hidden="true"></i>
+                        <div>
+                            <strong>Ghế đang được giữ tạm thời</strong>
+                            <div>
+                                Hoàn tất đặt vé trước
+                                <time datetime="{{ $booking->hold_expires_at->toIso8601String() }}">
+                                    {{ $booking->hold_expires_at->format('d/m/Y H:i:s') }}
+                                </time>.
+                            </div>
+                            <div class="hold-countdown mt-1">
+                                Thời gian còn lại:
+                                <strong id="hold-countdown"
+                                    data-expires-at="{{ $booking->hold_expires_at->timestamp }}">
+                                    --:--
+                                </strong>
+                            </div>
+                        </div>
                     </div>
 
                     @if ($errors->any())
@@ -22,11 +44,13 @@
                         </div>
                     @endif
 
+                    {{-- THÔNG TIN PHIM --}}
                     <div class="row g-3 mb-4">
                         <div class="col-md-6">
                             <p class="text-secondary mb-1">Phim</p>
                             <h4 class="mb-0">{{ $booking->showtime->movie->title }}</h4>
                         </div>
+
                         <div class="col-md-6 text-md-end">
                             <p class="text-secondary mb-1">Mã đặt vé</p>
                             <strong class="text-warning">{{ $booking->booking_code }}</strong>
@@ -36,20 +60,31 @@
                     <div class="row g-3 mb-4">
                         <div class="col-md-4">
                             <p class="text-secondary mb-1">Rạp</p>
-                            <p class="mb-0">{{ $booking->showtime->room->cinema->name ?? 'YUNFLIMS' }}</p>
+                            <p class="mb-0">
+                                {{ $booking->showtime->room->cinema->name ?? 'YUNFLIMS' }}
+                            </p>
                         </div>
+
                         <div class="col-md-4">
                             <p class="text-secondary mb-1">Phòng</p>
-                            <p class="mb-0">{{ $booking->showtime->room->name }} · {{ $booking->showtime->format?->name ?? '2D' }}</p>
+                            <p class="mb-0">
+                                {{ $booking->showtime->room->name }}
+                                · {{ $booking->showtime->format?->name ?? '2D' }}
+                            </p>
                         </div>
+
                         <div class="col-md-4">
                             <p class="text-secondary mb-1">Suất chiếu</p>
-                            <p class="mb-0">{{ $booking->showtime->starts_at->format('d/m/Y H:i') }}</p>
+                            <p class="mb-0">
+                                {{ $booking->showtime->starts_at->format('d/m/Y H:i') }}
+                            </p>
                         </div>
                     </div>
 
+                    {{-- GHẾ ĐÃ CHỌN --}}
                     <div class="mb-4">
                         <p class="text-secondary mb-2">Ghế đã chọn</p>
+
                         <div class="d-flex flex-wrap gap-2">
                             @foreach ($booking->bookingSeats as $bookingSeat)
                                 <span class="badge bg-success px-3 py-2">
@@ -60,70 +95,104 @@
                         </div>
                     </div>
 
-                    <div class="border border-secondary rounded p-3 mb-4">
-                        <h5 class="mb-3">Chọn phương thức thanh toán</h5>
+                    {{-- BẮP NƯỚC ĐÃ CHỌN --}}
+                    <div class="border-top border-secondary pt-4 mt-4">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h5 class="fw-bold mb-0">
+                                <i class="bi bi-cup-straw me-2 text-warning"></i>
+                                Bắp nước đã chọn
+                            </h5>
 
-                        <form method="POST" action="{{ route('bookings.payment.process', $booking) }}">
+                            <a href="{{ route('bookings.concessions', $booking) }}"
+                               class="btn btn-sm btn-outline-warning">
+                                <i class="bi bi-pencil-square me-1"></i>
+                                Chỉnh sửa
+                            </a>
+                        </div>
+
+                        @if ($booking->concessionOrder && $booking->concessionOrder->items->isNotEmpty())
+                            @foreach ($booking->concessionOrder->items as $item)
+                                <div class="d-flex justify-content-between align-items-center gap-3 mb-3">
+                                    <div>
+                                        <div class="fw-semibold">{{ $item->product_name }}</div>
+                                        <small class="text-secondary">{{ number_format((float) $item->unit_price, 0, ',', '.') }} đ × {{ $item->quantity }}</small>
+                                    </div>
+                                    <div class="fw-semibold text-warning text-nowrap">{{ number_format((float) $item->subtotal, 0, ',', '.') }} đ</div>
+                                </div>
+                            @endforeach
+                            <div class="d-flex justify-content-between border-top border-secondary pt-3">
+                                <span class="text-secondary">Tổng bắp nước</span>
+                                <strong class="text-warning">{{ number_format((float) $booking->concessionOrder->total_amount, 0, ',', '.') }} đ</strong>
+                            </div>
+                        @else
+                            <div class="text-secondary mb-2">Bạn chưa chọn bắp nước.</div>
+                            <a href="{{ route('bookings.concessions', $booking) }}" class="btn btn-sm btn-outline-warning">
+                                <i class="bi bi-plus-circle me-1"></i> Chọn bắp nước
+                            </a>
+                        @endif
+                    </div>
+
+                    {{-- THANH TOÁN --}}
+                    <div class="border-top border-secondary pt-4 mt-4">
+                        <div class="payment-sandbox mb-4">
+                            <div class="payment-sandbox-head">
+                                <i class="bi bi-shield-lock" aria-hidden="true"></i>
+                                <div>
+                                    <h3 class="h6 mb-1">Chọn phương thức thanh toán</h3>
+                                    <p class="mb-0">Thanh toán được xử lý tại cổng chính thức. YUNFLIMS chỉ xác nhận vé sau khi xác minh kết quả giao dịch.</p>
+                                </div>
+                            </div>
+                            @forelse ($gateways ?? [] as $gateway)
+                                @foreach ($gateway['methods'] as $methodValue => $methodLabel)
+                                    <form method="POST"
+                                          action="{{ route('bookings.payment.process', $booking) }}"
+                                          class="payment-method-form">
+                                        @csrf
+                                        <input type="hidden" name="gateway" value="{{ $gateway['name'] }}" />
+                                        <input type="hidden" name="method" value="{{ $methodValue }}" />
+                                        <button type="submit" class="payment-method-option">
+                                            <span class="payment-method-mark payment-method-mark--{{ $gateway['name'] }}">
+                                                {{ strtoupper($gateway['name']) }}
+                                            </span>
+                                            <span class="payment-method-copy">
+                                                <strong>{{ $gateway['label'] }}</strong>
+                                                <small>{{ $methodLabel }} · Thanh toán bảo mật</small>
+                                            </span>
+                                            <span class="payment-method-action">
+                                                Tiếp tục <i class="bi bi-chevron-right" aria-hidden="true"></i>
+                                            </span>
+                                        </button>
+                                    </form>
+                                @endforeach
+                            @empty
+                                <div class="alert alert-info mb-0">
+                                    Cổng thanh toán thật chưa được cấu hình. Vui lòng liên hệ quản trị viên để thiết lập tài khoản VNPay hoặc MoMo.
+                                </div>
+                            @endforelse
+                        </div>
+                    </div>
+
+{{-- TỔNG TIỀN --}}
+                    <div class="d-flex flex-column flex-sm-row justify-content-between align-items-sm-center gap-3 mt-3 pt-3 border-top border-secondary">
+                        <div>
+                            <p class="mb-1 text-secondary">Tổng thanh toán</p>
+                            <h3 class="text-warning mb-0">
+                                {{ number_format((float) $booking->total_amount, 0, ',', '.') }} đ
+                            </h3>
+                            <small class="text-secondary">
+                                Đã bao gồm tiền vé và bắp nước (nếu có)
+                            </small>
+                        </div>
+
+                        <form method="POST"
+                              action="{{ route('bookings.cancel', $booking) }}"
+                              onsubmit="return confirm('Hủy đơn đặt vé và giải phóng ghế đang giữ?')">
                             @csrf
 
-                            <div class="list-group">
-                                <label class="list-group-item bg-transparent border-secondary text-white d-flex align-items-center gap-3">
-                                    <input class="form-check-input me-2" type="radio" name="payment_method" value="card" checked>
-                                    <span>
-                                        <strong>Thẻ tín dụng / Ghi nợ</strong><br>
-                                        <small class="text-secondary">Thanh toán thử nghiệm</small>
-                                    </span>
-                                </label>
-
-                                <label class="list-group-item bg-transparent border-secondary text-white d-flex align-items-center gap-3">
-                                    <input class="form-check-input me-2" type="radio" name="payment_method" value="momo">
-                                    <span>
-                                        <strong>Ví MoMo</strong><br>
-                                        <small class="text-secondary">Mô phỏng thanh toán</small>
-                                    </span>
-                                </label>
-
-                                <label class="list-group-item bg-transparent border-secondary text-white d-flex align-items-center gap-3">
-                                    <input class="form-check-input me-2" type="radio" name="payment_method" value="bank_transfer">
-                                    <span>
-                                        <strong>Chuyển khoản ngân hàng</strong><br>
-                                        <small class="text-secondary">Thanh toán giả lập</small>
-                                    </span>
-                                </label>
-
-                                <label class="list-group-item bg-transparent border-secondary text-white d-flex align-items-center gap-3">
-                                    <input class="form-check-input me-2" type="radio" name="payment_method" value="cash">
-                                    <span>
-                                        <strong>Tiền mặt tại quầy</strong><br>
-                                        <small class="text-secondary">Chỉ dùng kiểm thử</small>
-                                    </span>
-                                </label>
-                            </div>
-
-                            <fieldset class="mt-4">
-                                <legend class="h6">Kết quả mô phỏng</legend>
-                                <div class="d-flex flex-wrap gap-3">
-                                    <label class="form-check">
-                                        <input class="form-check-input" type="radio" name="test_result" value="success" checked>
-                                        <span class="form-check-label text-success">Mô phỏng thành công</span>
-                                    </label>
-                                    <label class="form-check">
-                                        <input class="form-check-input" type="radio" name="test_result" value="failed">
-                                        <span class="form-check-label text-danger">Mô phỏng thất bại</span>
-                                    </label>
-                                </div>
-                            </fieldset>
-
-                            <div class="d-flex justify-content-between align-items-center mt-4 pt-3 border-top border-secondary">
-                                <div>
-                                    <p class="mb-1 text-secondary">Tổng tiền</p>
-                                    <h3 class="text-warning mb-0">{{ number_format($booking->total_amount) }} đ</h3>
-                                </div>
-
-                                <button type="submit" class="btn btn-red px-4">
-                                    Xác nhận thanh toán
-                                </button>
-                            </div>
+                            <button type="submit" class="btn btn-outline-light">
+                                <i class="bi bi-x-circle me-2" aria-hidden="true"></i>
+                                Hủy giữ ghế
+                            </button>
                         </form>
                     </div>
                 </div>
@@ -132,3 +201,36 @@
     </div>
 </div>
 @endsection
+
+@push('scripts')
+<script>
+    const countdown = document.getElementById('hold-countdown');
+
+    if (countdown) {
+        const expiresAt = Number(countdown.dataset.expiresAt) * 1000;
+
+        function updateHoldCountdown() {
+            const secondsRemaining = Math.max(
+                0,
+                Math.ceil((expiresAt - Date.now()) / 1000)
+            );
+
+            const minutes = Math.floor(secondsRemaining / 60);
+            const seconds = secondsRemaining % 60;
+
+            countdown.textContent =
+                String(minutes).padStart(2, '0') + ':' +
+                String(seconds).padStart(2, '0');
+
+            if (secondsRemaining === 0) {
+                window.location.reload();
+                return;
+            }
+
+            window.setTimeout(updateHoldCountdown, 1000);
+        }
+
+        updateHoldCountdown();
+    }
+</script>
+@endpush

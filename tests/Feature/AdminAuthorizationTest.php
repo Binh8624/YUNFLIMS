@@ -25,4 +25,32 @@ class AdminAuthorizationTest extends TestCase
             ->get(route('admin.dashboard'))
             ->assertForbidden();
     }
+
+    public function test_customer_cannot_access_admin_reports(): void
+    {
+        $customer = new User([
+            'name' => 'Test Customer',
+            'email' => 'customer@example.test',
+            'role' => 'customer',
+        ]);
+        $customer->forceFill(['is_active' => true]);
+
+        $this->actingAs($customer)
+            ->get(route('admin.reports.index'))
+            ->assertForbidden();
+    }
+
+    public function test_customer_cannot_access_admin_activity_logs(): void
+    {
+        $customer = new User([
+            'name' => 'Test Customer',
+            'email' => 'customer@example.test',
+            'role' => 'customer',
+        ]);
+        $customer->forceFill(['is_active' => true]);
+
+        $this->actingAs($customer)
+            ->get(route('admin.activity-logs.index'))
+            ->assertForbidden();
+    }
 }

@@ -12,12 +12,14 @@ class BookingSeat extends Model
         'showtime_id',
         'seat_id',
         'price',
+        'released_at',
     ];
 
     protected function casts(): array
     {
         return [
             'price' => 'decimal:2',
+            'released_at' => 'datetime',
         ];
     }
 

@@ -4,7 +4,7 @@
 
 @section('content')
 <div class="container-fluid py-4 px-lg-4">
-    <div class="mb-4"><h1 class="h2 fw-bold mb-1">Thanh toán</h1><p class="text-secondary mb-0">Các giao dịch được lưu cùng đơn đặt vé; hệ thống hiện dùng quy trình thanh toán thử nghiệm.</p></div>
+    <div class="mb-4"><h1 class="h2 fw-bold mb-1">Thanh toán</h1><p class="text-secondary mb-0">Các giao dịch được lưu cùng đơn đặt vé. Hệ thống chưa cấu hình cổng thanh toán để xác nhận giao dịch thực.</p></div>
     <form method="GET" class="row g-2 mb-3">
         <div class="col-md-4"><input name="search" value="{{ request('search') }}" class="form-control" placeholder="Mã giao dịch hoặc mã đơn"></div>
         <div class="col-md-2"><select name="payment_status" class="form-select"><option value="">Mọi trạng thái</option>@foreach (['pending', 'paid', 'failed', 'cancelled'] as $status)<option value="{{ $status }}" @selected(request('payment_status') === $status)>{{ ucfirst($status) }}</option>@endforeach</select></div>

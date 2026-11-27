@@ -47,6 +47,13 @@
                 <option value="inactive" @selected(request('status') === 'inactive')>Ẩn</option>
             </select>
         </div>
+        <div class="col-md-3">
+            <select name="age_rating_verified" class="form-select" aria-label="Lọc trạng thái xác minh độ tuổi">
+                <option value="">Mọi trạng thái phân loại</option>
+                <option value="0" @selected(request('age_rating_verified') === '0')>Cần xác minh</option>
+                <option value="1" @selected(request('age_rating_verified') === '1')>Đã xác minh</option>
+            </select>
+        </div>
         <div class="col-auto"><button class="btn btn-outline-light">Lọc phim</button></div>
     </form>
 
@@ -58,6 +65,9 @@
                     <th>Tên phim</th>
                     <th>Thể loại</th>
                     <th>Thời lượng</th>
+                    <th>Định dạng</th>
+                    <th>Phân loại tuổi</th>
+                    <th>Nổi bật</th>
                     <th>Trạng thái</th>
                     <th>Thao tác</th>
                 </tr>
@@ -78,8 +88,23 @@
                         </td>
 
                         <td>{{ $movie->title }}</td>
-                        <td>{{ $movie->genre }}</td>
+                        <td>{{ implode(' · ', array_slice($movie->genre_labels, 0, 3)) }}</td>
                         <td>{{ $movie->duration }} phút</td>
+                        <td>
+    @forelse ($movie->formats as $format)
+        <span class="badge bg-info text-dark me-1 mb-1">
+            {{ $format->name }}
+        </span>
+    @empty
+        <span class="text-secondary">Chưa thiết lập</span>
+    @endforelse
+</td>
+                        <td>
+                            <span class="badge {{ $movie->age_rating_verified ? 'bg-success' : 'bg-warning text-dark' }}">
+                                {{ $movie->age_rating_verified ? $movie->age_rating : 'Cần xác minh' }}
+                            </span>
+                        </td>
+                        <td>{{ $movie->is_featured ? 'Có' : 'Không' }}</td>
 
                         <td>
                             @switch($movie->status)
@@ -117,7 +142,7 @@
                     </tr>
                 @empty
                     <tr>
-                        <td colspan="6" class="text-center py-4">
+                        <td colspan="9" class="text-center py-4">
                             Chưa có phim nào trong hệ thống.
                         </td>
                     </tr>

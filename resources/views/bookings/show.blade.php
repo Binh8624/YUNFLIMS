@@ -15,7 +15,7 @@
         </div>
     @endif
 
-    <div class="card bg-dark text-white border-secondary mx-auto"
+    <div class="card bg-dark text-white border-secondary mx-auto cinema-panel"
          style="max-width:820px;">
         <div class="card-body p-4">
             <div class="d-flex justify-content-between align-items-start flex-wrap gap-3 mb-4">
@@ -82,10 +82,10 @@
                 </div>
 
                 <div class="col-lg-4 text-center border-start border-secondary">
-                    @if ($booking->status === 'confirmed' && $booking->qr_code)
+                    @if ($booking->status === 'confirmed' && $booking->payment_status === 'paid' && ($booking->ticket_status ?? 'available') === 'available')
                         <p class="text-secondary mb-2">Mã QR vé điện tử</p>
                         <div class="d-inline-block bg-white p-2 rounded">
-                            {!! $booking->qr_code !!}
+                            {!! \App\Models\Booking::generateQrSvg($booking->booking_code) !!}
                         </div>
                     @endif
 
@@ -108,6 +108,17 @@
             <div class="mt-4 d-flex flex-wrap gap-2">
                 <a href="{{ route('bookings.history') }}" class="btn btn-outline-light">Lịch sử đặt vé</a>
                 <a href="{{ route('showtimes.index') }}" class="btn btn-danger">Quay lại suất chiếu</a>
+                @if ($booking->status === 'pending')
+                    <form method="POST" action="{{ route('bookings.cancel', $booking) }}" onsubmit="return confirm('Hủy đơn đặt vé và giải phóng ghế đang giữ?')">
+                        @csrf
+                        <button type="submit" class="btn btn-outline-light">Hủy giữ ghế</button>
+                    </form>
+                @elseif ($booking->status === 'confirmed' && $booking->payment_status === 'paid')
+                    <form method="POST" action="{{ route('bookings.cancel', $booking) }}" onsubmit="return confirm('Hủy vé và yêu cầu hoàn tiền theo chính sách? Điểm thưởng của đơn sẽ bị thu hồi.')">
+                        @csrf
+                        <button type="submit" class="btn btn-outline-warning">Hủy vé &amp; hoàn tiền</button>
+                    </form>
+                @endif
             </div>
         </div>
     </div>

@@ -13,6 +13,7 @@ class SeatController extends Controller
 {
     public function index(Room $room)
     {
+        abort_unless(request()->user()->canManageCinema((int) $room->cinema_id), 403);
         $room->load('cinema');
         $seats = $room->seats()->orderBy('row_number')->orderBy('seat_number')->get();
         $rows = $seats->groupBy('row_number');
@@ -22,6 +23,7 @@ class SeatController extends Controller
 
     public function store(Request $request, Room $room)
     {
+        abort_unless($request->user()->canManageCinema((int) $room->cinema_id), 403);
         $data = $this->validateSeat($request);
 
         DB::transaction(function () use ($room, $data) {
@@ -51,6 +53,7 @@ class SeatController extends Controller
 
     public function storeRow(Request $request, Room $room)
     {
+        abort_unless($request->user()->canManageCinema((int) $room->cinema_id), 403);
         $data = $request->validate([
             'row_number' => ['required', 'integer', 'min:1', 'max:26'],
             'seat_count' => ['required', 'integer', 'min:1', 'max:999'],
@@ -89,6 +92,7 @@ class SeatController extends Controller
 
     public function destroyRow(Room $room, int $rowNumber)
     {
+        abort_unless(request()->user()->canManageCinema((int) $room->cinema_id), 403);
         DB::transaction(function () use ($room, $rowNumber) {
             $lockedRoom = Room::whereKey($room->id)->lockForUpdate()->firstOrFail();
             $seats = $lockedRoom->seats()->where('row_number', $rowNumber)->lockForUpdate()->get();
@@ -110,6 +114,7 @@ class SeatController extends Controller
 
     public function storeColumn(Request $request, Room $room)
     {
+        abort_unless($request->user()->canManageCinema((int) $room->cinema_id), 403);
         $data = $request->validate([
             'seat_number' => ['required', 'integer', 'min:1', 'max:999'],
             'seat_type' => ['required', 'in:standard,vip,couple'],
@@ -152,6 +157,7 @@ class SeatController extends Controller
 
     public function destroyColumn(Room $room, int $seatNumber)
     {
+        abort_unless(request()->user()->canManageCinema((int) $room->cinema_id), 403);
         DB::transaction(function () use ($room, $seatNumber) {
             $lockedRoom = Room::whereKey($room->id)->lockForUpdate()->firstOrFail();
             $seats = $lockedRoom->seats()->where('seat_number', $seatNumber)->lockForUpdate()->get();
@@ -173,6 +179,7 @@ class SeatController extends Controller
 
     public function update(Request $request, Room $room, Seat $seat)
     {
+        abort_unless($request->user()->canManageCinema((int) $room->cinema_id), 403);
         $data = $this->validateSeat($request);
         DB::transaction(function () use ($room, $seat, $data) {
             $lockedSeat = Seat::whereKey($seat->id)->lockForUpdate()->firstOrFail();
@@ -206,6 +213,7 @@ class SeatController extends Controller
 
     public function destroy(Room $room, Seat $seat)
     {
+        abort_unless(request()->user()->canManageCinema((int) $room->cinema_id), 403);
         DB::transaction(function () use ($room, $seat) {
             $lockedSeat = Seat::whereKey($seat->id)->lockForUpdate()->firstOrFail();
             abort_unless($lockedSeat->room_id === $room->id, 404);

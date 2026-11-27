@@ -15,6 +15,8 @@ class Showtime extends Model
         'starts_at',
         'ends_at',
         'price',
+        'vip_price',
+        'couple_price',
         'status',
     ];
 
@@ -24,7 +26,18 @@ class Showtime extends Model
             'starts_at' => 'datetime',
             'ends_at' => 'datetime',
             'price' => 'decimal:2',
+            'vip_price' => 'decimal:2',
+            'couple_price' => 'decimal:2',
         ];
+    }
+
+    public function basePriceForSeatType(string $seatType): float
+    {
+        return match ($seatType) {
+            'vip' => (float) ($this->vip_price ?? $this->price),
+            'couple' => (float) ($this->couple_price ?? $this->price),
+            default => (float) $this->price,
+        };
     }
 
     public function movie(): BelongsTo
